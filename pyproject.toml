@@ -8,6 +8,12 @@ version = "4.3.0"
 description = "Hybrid security auditor: interprocedural dataflow + grounded LLM adjudication + dynamic confirmation"
 requires-python = ">=3.10"
 
+[project.optional-dependencies]
+# Base install is defense-only and pure-stdlib. Offensive extras are opt-in so
+# the red-team lane's dependencies are never pulled by a plain `pip install`.
+redteam = ["requests>=2.28", "bcrypt>=4.0", "passlib>=1.7"]
+ai = ["ollama>=0.3"]
+
 [project.scripts]
 attestor = "attestor.cli:main"
 

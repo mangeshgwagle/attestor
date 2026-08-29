@@ -1,0 +1,557 @@
+#!/usr/bin/env python3
+"""synth42 -- white-box program synthesis from input/output examples.
+
+Given example pairs (bytes-in -> bytes-out), synthesizes a byte-transform
+program composed from a documented operation grammar:
+
+    xor k | add k | sub k | rotl k | rot_alpha k | upper | lower
+    b64enc | b64dec | hexenc | hexdec | reverse | keep_digits
+    keep_alpha | keep_hex | keep_printable | prefix s | suffix s
+
+Layer 1 solves parameterized ops ANALYTICALLY (intersecting per-position
+constraints across examples -- the same discipline as concolic42).
+Layer 2 searches compositions (BFS, beam-capped, state-deduped).
+Survivors are fuzz-bombed for robustness. Every synthesis emits a full
+derivation trace: what was tried, what was pruned, and why the winner fits.
+
+No neural networks anywhere: every step is inspectable and replayable.
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import hashlib
+import itertools
+import json
+import random
+import string
+import sys
+
+SY_SCHEMA = "attestor-synthesizer-4.2"
+EXIT_CLEAN = 0
+EXIT_SYNTHESIZED = 1
+EXIT_INVALID = 2
+EXIT_OPERATIONAL = 4
+
+MAX_DEPTH = 3
+BEAM_WIDTH = None          # None = unlimited
+
+
+class SynError(ValueError):
+    pass
+
+
+def sha256_hex(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def canonical_json(obj) -> str:
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"))
+
+
+# ------------------------------------------------------------- operations
+
+def _op_xor(k):
+    return lambda b: bytes(x ^ k for x in b)
+
+
+def _op_add(k):
+    return lambda b: bytes((x + k) & 0xFF for x in b)
+
+
+def _op_sub(k):
+    return lambda b: bytes((x - k) & 0xFF for x in b)
+
+
+def _op_rotl(shift):
+    def fn(b):
+        amount = shift % 8
+        if not b or amount == 0:
+            return bytes(b)
+        out = bytearray()
+        for x in b:
+            out.append(((x << amount) & 0xFF) | (x >> (8 - amount)))
+        return bytes(out)
+    return fn
+
+
+_ALPHA_LOWER = string.ascii_lowercase.encode()
+_ALPHA_UPPER = string.ascii_uppercase.encode()
+
+
+def _op_rot_alpha(k):
+    def fn(b):
+        out = bytearray()
+        for x in b:
+            if 97 <= x <= 122:
+                out.append(_ALPHA_LOWER[(x - 97 + k) % 26])
+            elif 65 <= x <= 90:
+                out.append(_ALPHA_UPPER[(x - 65 + k) % 26])
+            else:
+                out.append(x)
+        return bytes(out)
+    return fn
+
+
+def _op_reverse(b):
+    return b[::-1]
+
+
+def _op_upper(b):
+    return b.upper()
+
+
+def _op_lower(b):
+    return b.lower()
+
+
+def _op_b64enc(b):
+    return base64.b64encode(b)
+
+
+def _op_b64dec(b):
+    try:
+        return base64.b64decode(b, validate=False)
+    except Exception:  # noqa: BLE001
+        return b""
+
+
+def _op_hexenc(b):
+    return b.hex().encode()
+
+
+def _op_hexdec(b):
+    try:
+        return bytes.fromhex(b.decode("ascii", errors="ignore"))
+    except ValueError:
+        return b""
+
+
+def _make_keep(character_filter):
+    def fn(b):
+        return bytes(x for x in b if character_filter(chr(x)))
+    return fn
+
+
+def _op_prefix(s):
+    return lambda b: s.encode("latin-1") + b
+
+
+def _op_suffix(s):
+    return lambda b: b + s.encode("latin-1")
+
+
+ANALYTIC_OPS = {
+    "xor": (_op_xor, range(256)),
+    "add": (_op_add, range(256)),
+    "sub": (_op_sub, range(256)),
+    "rotl": (_op_rotl, range(1, 8)),
+    "rot_alpha": (_op_rot_alpha, range(1, 26)),
+}
+
+SIMPLE_OPS = {
+    "reverse": _op_reverse,
+    "upper": _op_upper,
+    "lower": _op_lower,
+    "b64enc": _op_b64enc,
+    "b64dec": _op_b64dec,
+    "hexenc": _op_hexenc,
+    "hexdec": _op_hexdec,
+    "keep_digits": _make_keep(str.isdigit),
+    "keep_alpha": _make_keep(str.isalpha),
+    "keep_hex": _make_keep(lambda ch: ch in string.hexdigits),
+    "keep_printable": _make_keep(lambda ch: 32 <= ord(ch) < 127),
+}
+
+
+def apply_pipeline(pipeline, data):
+    current = bytes(data)
+    for name, param in pipeline:
+        if name in ANALYTIC_OPS:
+            factory, _space = ANALYTIC_OPS[name]
+            current = factory(param)(current)
+        else:
+            current = SIMPLE_OPS[name](current)
+        if not isinstance(current, (bytes, bytearray)):
+            raise SynError("op %r left the byte domain" % name)
+    return bytes(current)
+
+
+# ------------------------------------------------------- analytic solvers
+
+def _solve_byte_map(op_name, examples):
+    """Intersect per-position constraints to solve the constant."""
+    factory, space = ANALYTIC_OPS[op_name]
+    candidates = None
+    for src, dst in examples:
+        if len(src) != len(dst):
+            continue
+        allowed = set(space)
+        for i in range(len(src)):
+            valid = {k for k in allowed
+                     if factory(k)(bytes([src[i]])) == bytes([dst[i]])}
+            candidates = valid if candidates is None \
+                else (candidates & valid)
+            if not candidates:
+                break
+        if candidates is not None and not candidates:
+            continue
+    if not candidates:
+        return []
+    return sorted(candidates)[:4]
+
+
+def analytic_candidates(examples):
+    """Ops solved directly from constraints, strongest evidence first."""
+    found = []
+    for op_name in ANALYTIC_OPS:
+        for constant in _solve_byte_map(op_name, examples):
+            pipeline = [(op_name, constant)]
+            if all(apply_pipeline(pipeline, src) == dst
+                   for src, dst in examples):
+                found.append(pipeline)
+    for name, fn in SIMPLE_OPS.items():
+        if all(fn(src) == dst for src, dst in examples):
+            found.append([(name, None)])
+    return found
+
+
+# ------------------------------------------------------ compositional BFS
+
+def _state_key(inputs):
+    return tuple(hashlib.sha256(b).hexdigest()[:16] for b in inputs)
+
+
+def compositional_search(examples, max_depth=MAX_DEPTH,
+                         beam=None, trace=None):
+    inputs = [src for src, _ in examples]
+    targets = {dst for _, dst in examples}
+    start = ([], inputs)
+    frontier = [start]
+    visited = {_state_key(inputs)}
+    compositions = []
+
+    for depth in range(1, max_depth + 1):
+        next_frontier = []
+        for pipeline, outputs in frontier:
+            for name in list(SIMPLE_OPS.keys()) + \
+                    list(ANALYTIC_OPS.keys()):
+                param_options = [None]
+                if name in ANALYTIC_OPS:
+                    _, space = ANALYTIC_OPS[name]
+                    param_options = sorted(space)[::max(
+                        1, len(space) // 24)]
+                for param in param_options:
+                    try:
+                        new_outputs = [
+                            apply_pipeline(pipeline + [(name, param)], b)
+                            for b in inputs]
+                    except SynError:
+                        continue
+                    candidate = pipeline + [(name, param)]
+                    targets_list = [d for _, d in examples]
+                    if new_outputs == targets_list:
+                        compositions.append(candidate)
+                        if trace is not None:
+                            trace.append({
+                                "depth": depth,
+                                "event": "solution-found",
+                                "pipeline": candidate,
+                            })
+                        return compositions
+                    key = _state_key(new_outputs)
+                    if key in visited:
+                        continue
+                    visited.add(key)
+                    next_frontier.append((candidate, new_outputs))
+        # beam: deterministic pruning keeps shortest outputs first
+        next_frontier.sort(key=lambda item: (
+            sum(len(o) for o in item[1]),
+            canonical_json(item[0])))
+        frontier = next_frontier[:beam]
+        if trace is not None:
+            trace.append({"depth": depth, "survivors": len(frontier)})
+    return compositions
+
+
+# ------------------------------------------------------------- robustness
+
+def fuzz_stability(fn, rounds=512, seed=0):
+    rng = random.Random(seed)
+    for _ in range(rounds):
+        blob = bytes(rng.randrange(256)
+                     for _ in range(rng.randint(0, 96)))
+        try:
+            out = fn(blob)
+        except Exception as exc:  # noqa: BLE001
+            return {"stable": False, "reason": "%s: %s"
+                    % (type(exc).__name__, exc)}
+        if not isinstance(out, bytes):
+            return {"stable": False, "reason": "non-bytes output"}
+    return {"stable": True, "rounds": rounds}
+
+
+RUNTIME_PREAMBLE = '''import base64 as _b64
+import string as _string
+
+_ALPHA_LOWER = _string.ascii_lowercase.encode()
+_ALPHA_UPPER = _string.ascii_uppercase.encode()
+
+
+def _xor(k):
+    return lambda b: bytes(x ^ k for x in b)
+
+
+def _add(k):
+    return lambda b: bytes((x + k) & 0xFF for x in b)
+
+
+def _sub(k):
+    return lambda b: bytes((x - k) & 0xFF for x in b)
+
+
+def _rotl(k):
+    def fn(b):
+        k = k % 8
+        if not b or k == 0:
+            return bytes(b)
+        return bytes((((x << k) & 0xFF) | (x >> (8 - k))) for x in b)
+    return fn
+
+
+def _rot_alpha(k):
+    def fn(b):
+        out = bytearray()
+        for x in b:
+            if 97 <= x <= 122:
+                out.append(_ALPHA_LOWER[(x - 97 + k) % 26])
+            elif 65 <= x <= 90:
+                out.append(_ALPHA_UPPER[(x - 65 + k) % 26])
+            else:
+                out.append(x)
+        return bytes(out)
+    return fn
+
+
+def _reverse(b):
+    return b[::-1]
+
+
+def _upper(b):
+    return b.upper()
+
+
+def _lower(b):
+    return b.lower()
+
+
+def _b64enc(b):
+    return _b64.b64encode(b)
+
+
+def _b64dec(b):
+    try:
+        return _b64.b64decode(b, validate=False)
+    except Exception:
+        return b""
+
+
+def _hexenc(b):
+    return b.hex().encode()
+
+
+def _hexdec(b):
+    try:
+        return bytes.fromhex(b.decode("ascii", errors="ignore"))
+    except ValueError:
+        return b""
+
+
+def _make_keep(filt):
+    return lambda b: bytes(x for x in b if filt(chr(x)))
+
+
+_ANALYTIC_FACTORIES = {
+    "xor": _xor, "add": _add, "sub": _sub,
+    "rotl": _rotl, "rot_alpha": _rot_alpha,
+}
+
+_SIMPLE = {
+    "reverse": _reverse, "upper": _upper, "lower": _lower,
+    "b64enc": _b64enc, "b64dec": _b64dec,
+    "hexenc": _hexenc, "hexdec": _hexdec,
+    "keep_digits": _make_keep(lambda ch: ch.isdigit()),
+    "keep_alpha": _make_keep(lambda ch: ch.isalpha()),
+    "keep_hex": _make_keep(lambda ch: ch in _string.hexdigits),
+    "keep_printable": _make_keep(lambda ch: 32 <= ord(ch) < 127),
+}
+
+
+def _apply(pipeline, current):
+    current = bytes(current)
+    for name, param in pipeline:
+        if name in _ANALYTIC_FACTORIES:
+            current = _ANALYTIC_FACTORIES[name](param)(current)
+        else:
+            current = _SIMPLE[name](current)
+    return current
+
+
+def transform(data):
+    return _apply(PIPELINE, data)
+'''
+
+
+def emit_program(pipeline, examples, trace):
+    checks = []
+    for index, (src, dst) in enumerate(examples):
+        checks.append("assert transform(%r) == %r" % (src, dst))
+    script = "\n".join(
+        ["#!/usr/bin/env python3",
+         "# synthesized by attestor synth42 -- derivation-pinned",
+         "# derivation_sha256: %s" % sha256_hex(
+             canonical_json(trace).encode()),
+         "",
+         "PIPELINE = %r" % (pipeline,),
+         "",
+         RUNTIME_PREAMBLE,
+         "# verification (supplied examples)",
+         *checks,
+         "",
+         'if __name__ == "__main__":',
+         "    import sys",
+         "    sys.stdout.buffer.write(transform(sys.stdin.buffer.read()))",
+         ""])
+    return script
+
+
+# ---------------------------------------------------------------- driver
+
+def synthesize(examples, allow_compositional=True, fuzz_rounds=512):
+    if not examples:
+        raise SynError("at least one example pair required")
+    for src, dst in examples:
+        if not isinstance(src, (bytes, bytearray)) or \
+                not isinstance(dst, (bytes, bytearray)):
+            raise SynError("examples must be bytes pairs")
+
+    trace = [{"event": "start", "examples": len(examples)}]
+    solutions = analytic_candidates(examples)
+    trace.append({"event": "analytic-layer", "hits": len(solutions)})
+    method = "analytic"
+
+    if not solutions and allow_compositional:
+        solutions = compositional_search(examples, trace=trace)
+        method = "compositional-bfs"
+
+    if not solutions:
+        return {
+            "schema": SY_SCHEMA,
+            "tool": "synth42",
+            "synthesized": False,
+            "trace": trace[-40:],
+        }
+
+    winner = solutions[0]
+    fn = lambda data: apply_pipeline(winner, data)  # noqa: E731
+    stability = fuzz_stability(fn, rounds=fuzz_rounds)
+    trace.append({"event": "fuzz-stability", **stability})
+
+    script = emit_program(winner, examples, trace)
+    report = {
+        "schema": SY_SCHEMA,
+        "tool": "synth42",
+        "synthesized": True,
+        "method": method,
+        "pipeline": winner,
+        "pipeline_readable": " -> ".join(
+            name if param is None else "%s(%r)" % (name, param)
+            for name, param in winner),
+        "examples_satisfied": len(examples),
+        "fuzz_stability": stability,
+        "derivation_trace_tail": trace[-25:],
+        "derivation_sha256": sha256_hex(canonical_json(trace).encode()),
+        "script": script,
+        "boundary": ("synthesis over the documented operation grammar "
+                     "only; correctness is relative to supplied examples "
+                     "plus fuzz stability, not universal proof"),
+    }
+    return report
+
+
+def run_selftest():
+    checks = []
+
+    r13 = synthesize([(b"attack at dawn", b"nggnpx ng qnja")],
+                     allow_compositional=False)
+    checks.append(("rot13 discovered analytically",
+                   r13["synthesized"]
+                   and r13["pipeline"][0][0] == "rot_alpha"))
+
+    xr = synthesize([(b"hello world", bytes(x ^ 0x42 for x in b"hello world"))],
+                    allow_compositional=False)
+    checks.append(("xor key solved", xr["synthesized"]
+                   and xr["pipeline"] == [("xor", 0x42)]))
+
+    combo = synthesize([
+        (b"Abc", b"414243"),
+        (b"xyz", b"58595a"),
+    ])
+    checks.append(("two-op composition found",
+                   combo["synthesized"]
+                   and [name for name, _ in combo["pipeline"]]
+                   == ["upper", "hexenc"]))
+
+    stable = synthesize([(b"in", b"NI")])
+    checks.append(("winner survives fuzz gauntlet",
+                   stable["fuzz_stability"]["stable"]))
+
+    determinism_a = sha256_hex(canonical_json(
+        synthesize([(b"abc", b"nop")])["pipeline"]).encode())
+    determinism_b = sha256_hex(canonical_json(
+        synthesize([(b"abc", b"nop")])["pipeline"]).encode())
+    checks.append(("synthesis deterministic", determinism_a == determinism_b))
+
+    failed = [name for name, ok in checks if not ok]
+    return {
+        "schema": SY_SCHEMA,
+        "tool": "self-test",
+        "checks_total": len(checks),
+        "checks_failed": failed,
+        "passed": not failed,
+    }
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        prog="synth42", description="White-box program synthesis")
+    parser.add_argument("--spec", required=True,
+                        help="JSON file: [{'in':b64,'out':b64}, ...]")
+    parser.add_argument("--out")
+    parser.add_argument("--no-compositional", action="store_true")
+    args = parser.parse_args(argv)
+
+    import base64
+    try:
+        with open(args.spec, "r", encoding="utf-8") as handle:
+            raw = json.load(handle)
+        examples = [(base64.b64decode(item["in"]),
+                     base64.b64decode(item["out"])) for item in raw]
+        report = synthesize(examples,
+                            allow_compositional=not args.no_compositional)
+    except (SynError, OSError, KeyError, json.JSONDecodeError) as exc:
+        print("synth42: %s" % exc, file=sys.stderr)
+        return EXIT_INVALID
+
+    if args.out and report.get("synthesized"):
+        from pathlib import Path
+        Path(args.out).write_text(report["script"], encoding="utf-8")
+
+    printable = {k: v for k, v in report.items() if k != "script"}
+    print(json.dumps(printable, indent=2, sort_keys=True))
+    return EXIT_SYNTHESIZED if report.get("synthesized") else EXIT_CLEAN
+
+
+if __name__ == "__main__":
+    sys.exit(main())

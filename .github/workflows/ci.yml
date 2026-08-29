@@ -1,0 +1,221 @@
+name: Attestor CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  verify:
+    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11", "3.13"]
+
+    steps:
+      - name: Check out without persisted credentials
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Run unit tests
+        run: python -B -m unittest discover -s detector -p "test_*.py"
+
+      - name: Run Attestor detector self-test
+        run: python -B detector/attestor.py --self-test
+
+      - name: Prove every advanced rule fixture
+        run: python -B detector/advanced_rules.py --self-test
+
+      - name: Validate the 15K precision-flow catalog
+        run: python -B detector/precision_catalog.py --self-test
+
+      - name: Check security workbench JavaScript
+        run: node --check detector/ui/ui23.js
+
+      - name: Check VS Code bridge JavaScript
+        run: node --check integrations/vscode/extension.js
+
+      - name: Verify hardened model-assisted and local integration boundaries
+        run: |
+          python -B -m unittest discover -s integrations/attestor_chat -p "test_*.py"
+          python -B -m unittest discover -s integrations/attestor_reason -p "test_*.py"
+          python -B -m unittest discover -s integrations/attestor4kids -p "test_*.py"
+
+      - name: Verify staged VS Code server is current
+        run: python -B detector/restage_bundle.py --check
+
+      - name: Verify bounded release and global version contracts
+        run: >-
+          python -B -c "import pathlib,sys; sys.path.insert(0, 'detector');
+          import evidence_store41,attestor414,release_hardening as release,variant414;
+          version=pathlib.Path('VERSION').read_text(encoding='utf-8').strip();
+          assert version=='4.2';
+          assert release.PRODUCT_VERSION==version;
+          assert {attestor414.VERSION,evidence_store41.VERSION,
+          variant414.VERSION}=={'4.1.4'};
+          audit=release.audit_tree('detector'); assert audit['ok'], audit;
+          assert audit['file_count']<=release.MAX_FILES;
+          assert audit['bytes']<=release.MAX_TOTAL_BYTES;
+          print('version=%s release_files=%d release_bytes=%d' %
+          (version,audit['file_count'],audit['bytes']))"
+
+      - name: Verify Attestor 4.1.4 profile orchestration contracts
+        run: >-
+          python -B -c "import sys; sys.path.insert(0, 'detector');
+          import attestor414,variant414;
+          report=attestor414.maximum('realworld', variant='south-park',
+          improve=False, use_cache=False);
+          assert report['schema']=='attestor-maximum/4.1.4';
+          assert report['version']=='4.1.4';
+          assert report['variant_414']['selected_profile']['slug']=='south-park';
+          assert report['variant_414']['selected_profile_sha256']==
+          variant414.profile_identity(variant414.SOUTH_PARK);
+          assert attestor414.verify_report(report, root='realworld')[0];
+          assert report['execution']['attestor41_target_code_executed'] is False;
+          assert report['execution']['attestor41_network_accessed'] is False;
+          print('status=%s findings=%d' %
+          (report['status'], report['summary']['findings']))"
+
+      - name: Verify inherited Attestor 4.1.3 orchestration contracts
+        run: >-
+          python -B -c "import sys; sys.path.insert(0, 'detector');
+          import attack_surface413,attestor41,security_posture413,security_validation413,truth_guard41;
+          report=attestor41.maximum('realworld', legacy_components=(), improve=False,
+          use_cache=False); public=attestor41.safe_public_report(report, root='realworld');
+          assert public['schema']=='attestor-maximum/4.1';
+          assert public['version']=='4.1.3';
+          assert public['coding_fabric_41']['schema']=='attestor-coding-fabric/4.1';
+          assert public['security_static_fabric_41']['schema']=='attestor-security-static-fabric/4.1';
+          assert attack_surface413.verify_report(public['attack_surface_413'])[0];
+          assert security_posture413.verify_report(public['security_posture_413']);
+          assert security_validation413.verify_report(public['security_validation_413'])[0];
+          assert security_validation413.verify_report(
+          public['security_command_center_413'],
+          schema=security_validation413.COMMAND_CENTER_SCHEMA)[0];
+          assert public['execution']['attestor41_target_code_executed'] is False;
+          assert public['execution']['attestor413_validation_target_executed'] is False;
+          assert public['execution']['attestor413_automatic_apply'] is False;
+          assert public['execution']['attestor41_network_accessed'] is False;
+          assert public['execution']['research_network_accessed'] is False;
+          assert truth_guard41.verify_guarded(public, root='realworld')['ok'];
+          print('status=%s findings=%d' %
+          (public['status'], public['summary']['findings']))"
+
+      - name: Verify Attestor 4.0 orchestration contracts
+        run: >-
+          python -B -c "import sys; sys.path.insert(0, 'detector'); import attestor40;
+          report=attestor40.maximum('realworld/app.js', components=('engineering','security-fabric'),
+          improve=False, use_cache=False); public=attestor40.safe_public_report(report);
+          assert public['schema']=='attestor-maximum/4.0';
+          assert public['version']=='4.0.0';
+          assert public['engineering']['schema']=='attestor-engineering/4.0';
+          assert public['security_fabric']['schema']=='attestor-security-fabric/4.0';
+          assert public['execution']['target_code_executed'] is False;
+          assert public['execution']['host_execution_fallback'] is False;
+          assert attestor40.truth_guard40.verify_guarded(public)['ok'];
+          assert '_memory_snapshot' not in public;
+          print('status=%s engineering=%d security=%d' %
+          (public['status'], public['summary']['engineering_findings'],
+          public['summary']['security_fabric_findings']))"
+
+      - name: Verify Attestor 3.5 compatibility contracts
+        run: >-
+          python -B -c "import sys; sys.path.insert(0, 'detector'); import attestor35;
+          report=attestor35.maximum('realworld/app.js', components=('polyglot-ir',),
+          improve=False, use_cache=False); public=attestor35.safe_public_report(report);
+          assert public['schema']=='attestor-maximum/3.5';
+          assert public['version']=='3.5.0';
+          assert public['execution']['target_code_executed'] is False;
+          assert public['execution']['host_execution_fallback'] is False;
+          assert attestor35.truth_guard35.verify_guarded(public)['ok'];
+          assert '_memory_snapshot' not in public;
+          print('status=%s polyglot_files=%d' %
+          (public['status'], public['summary']['polyglot_files']))"
+
+      - name: Verify Attestor 3.0 compatibility contracts
+        run: >-
+          python -B -c "import sys; sys.path.insert(0, 'detector'); import attestor3;
+          report=attestor3.maximum('detector/test_attestor3.py', components=('scan','semantic'),
+          improve=False, use_cache=False); public=attestor3.public_report(report);
+          assert public['schema']=='attestor-maximum/3.0';
+          assert public['execution']['target_code_executed'] is False;
+          assert '_memory_snapshot' not in public;
+          print('status=%s findings=%d' % (public['status'], public['summary']['findings']))"
+
+      - name: Verify current SBOM serializations
+        run: >-
+          python -B -c "import sys; sys.path.insert(0, 'detector'); import supply_chain_center as s;
+          report=s.analyze_workspace('.');
+          assert report['sbom']['cyclonedx']['specVersion']=='1.7';
+          assert report['sbom']['spdx']['@context'].endswith('/3.0.1/spdx-context.jsonld');
+          print('dependencies=%d' % len(report['inventory']['dependencies']))"
+
+      - name: Run dry workspace scan
+        run: >-
+          python -B -c "import sys; sys.path.insert(0, 'detector'); import scanengine;
+          result = scanengine.scan(['detector'], jobs=2, tools=False, use_cache=False);
+          print('status=%s files=%d findings=%d' % (result.status, result.files_scanned, len(result.issues)));
+          raise SystemExit(0 if result.status not in {'failed', 'unsupported'} else 1)"
+
+      - name: Run dry quality gate smoke test
+        run: >-
+          python -B detector/qualitygate.py detector --min-grade F --max-high 999
+          --format json > quality-gate.json
+
+      - name: Upload deterministic gate report
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: quality-gate-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: quality-gate.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  attestor42-focused:
+    name: Attestor 4.2 language and permissioned-control contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out without persisted credentials
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Verify inherited mc.asm contracts
+        run: python -B -m unittest discover -s integrations/mc_asm -p "test_*.py"
+
+      - name: Verify AttestorLang sandbox contracts
+        run: python -B -m unittest discover -s integrations/attestorlang/tests -p "test_*.py"
+
+      - name: Verify permissioned-control contracts
+        run: python -B -m unittest discover -s detector -p "test_*control*42.py"
+
+      - name: Verify distribution version and isolated launchers
+        run: |
+          python -B -m unittest discover -s detector -p "test_version42.py"
+          python -B -m unittest discover -s detector -p "test_launchers42.py"
+
+      - name: Audit the complete Attestor 4.2 release tree
+        run: python -B detector/release_hardening.py .

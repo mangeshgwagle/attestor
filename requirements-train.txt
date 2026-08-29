@@ -1,0 +1,10 @@
+# Offline gate-training dependency.
+#
+# `detector/` deliberately imports nothing outside the standard library, which
+# is what lets Attestor scan anywhere without a supply chain.  Training is not
+# scanning: it happens once, on a machine somebody chose, so `gate_trainer/`
+# may use numpy and does -- the alternative is forty minutes per epoch of
+# pure-Python inner loops.  Nothing that ships reads this file; the artifact
+# `gate_trainer/` emits is JSON integers that `detector/neural_gate.py` loads
+# with no dependency on anything here.
+numpy>=1.26

@@ -1,0 +1,7 @@
+attestor 4.2;
+requires console.write;
+requires input.read;
+
+scene Main {
+    brainfuck { ,.,. }
+}

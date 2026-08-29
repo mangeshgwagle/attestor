@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Attestor 4.2 distribution · 4.1.4 analysis engine/protocol</title>
+  <link rel="stylesheet" href="/ui23.css">
+</head>
+<body data-theme="dark">
+  <a class="skip-link" href="#mainContent">Skip to workbench</a>
+  <button class="sidebar-backdrop" id="sidebarBackdrop" aria-label="Close navigation" hidden></button>
+
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="Workbench navigation">
+      <div class="brand-row">
+        <div class="brand-mark" aria-hidden="true">O</div>
+        <div class="brand-copy">
+          <strong>Attestor 4.2 distribution</strong>
+          <span>4.1.4 analysis engine/protocol</span>
+        </div>
+        <button class="icon-button sidebar-close" id="sidebarClose" aria-label="Close navigation">×</button>
+      </div>
+
+      <nav class="primary-nav" aria-label="Primary">
+        <button class="nav-item active" data-view="overview" aria-controls="view-overview" aria-current="page">
+          <span class="nav-icon" aria-hidden="true">⌂</span><span>Overview</span><kbd>Alt 1</kbd>
+        </button>
+        <button class="nav-item" data-view="scan" aria-controls="view-scan">
+          <span class="nav-icon" aria-hidden="true">◎</span><span>New scan</span><kbd>Alt 2</kbd>
+        </button>
+        <button class="nav-item" data-view="research" aria-controls="view-research">
+          <span class="nav-icon" aria-hidden="true">R</span><span>Research</span>
+        </button>
+        <button class="nav-item" data-view="findings" aria-controls="view-findings">
+          <span class="nav-icon" aria-hidden="true">≡</span><span>Findings</span><span class="nav-count" id="navFindingCount">0</span>
+        </button>
+        <button class="nav-item" data-view="attacks" aria-controls="view-attacks">
+          <span class="nav-icon" aria-hidden="true">A</span><span>Attack paths</span><span class="nav-count" id="navAttackCount">0</span>
+        </button>
+        <button class="nav-item" data-view="command" aria-controls="view-command">
+          <span class="nav-icon" aria-hidden="true">C</span><span>Security command</span>
+        </button>
+        <button class="nav-item" data-view="improvements" aria-controls="view-improvements">
+          <span class="nav-icon" aria-hidden="true">+</span><span>Improved results</span><span class="nav-count" id="navImprovementCount">0</span>
+        </button>
+        <button class="nav-item" data-view="compare" aria-controls="view-compare">
+          <span class="nav-icon" aria-hidden="true">⇄</span><span>Compare</span><kbd>Alt 6</kbd>
+        </button>
+        <button class="nav-item" data-view="history" aria-controls="view-history">
+          <span class="nav-icon" aria-hidden="true">◷</span><span>History</span><kbd>Alt 7</kbd>
+        </button>
+        <button class="nav-item" data-view="evidence" aria-controls="view-evidence">
+          <span class="nav-icon" aria-hidden="true">E</span><span>Evidence explorer</span>
+        </button>
+      </nav>
+
+      <section class="sidebar-section" aria-labelledby="quickActionsTitle">
+        <div class="sidebar-label" id="quickActionsTitle">Quick actions</div>
+        <div class="quick-actions">
+          <button id="attestor4Btn" data-quick-mode="attestor41">Attestor 4.1.4 Maximum<span>Attack paths, cloud, repair, and source-bound evidence</span></button>
+          <button id="computerBtn" data-quick-mode="computer41">Find projects on this computer<span>Pathless, bounded, and permission required every run</span></button>
+          <button id="researchBtn" data-quick-mode="research">Public-web research<span>Offline until you explicitly authorize online search</span></button>
+          <button id="improveBtn" data-quick-mode="improve">Verified improvement<span>Return complete safer source</span></button>
+          <button id="supplyBtn" data-quick-mode="supplychain">Supply-chain center<span>SBOM, VEX, provenance, risk</span></button>
+        </div>
+      </section>
+
+      <section class="engine-card" aria-label="Engine status">
+        <div class="engine-line">
+          <span><span class="status-dot" id="serverDot" aria-hidden="true"></span><span id="connectionLabel">Connecting</span></span>
+          <span class="local-badge">LOCAL</span>
+        </div>
+        <label for="versionSelect">Engine version</label>
+        <select id="versionSelect">
+          <option>Attestor 1.0</option><option>Attestor 1.1</option><option>Attestor 1.25</option>
+          <option>Attestor 1.3</option><option>Attestor 1.4</option><option>Attestor 1.5</option>
+          <option>Attestor 1.65</option><option>Attestor 1.9</option><option>Attestor 2</option>
+          <option>Attestor 2.1</option><option>Attestor 2.2</option><option>Attestor 2.3</option>
+          <option>Attestor 3.0</option><option>Attestor 3.5</option><option>Attestor 4.0</option><option>Attestor 4.1</option><option>Attestor 4.1.2</option><option>Attestor 4.1.3</option><option selected>Attestor 4.1.4</option>
+        </select>
+        <dl class="engine-meta">
+          <div><dt>Detector</dt><dd id="detectorPath">Checking…</dd></div>
+          <div><dt>Mode</dt><dd id="modeLabel">Attestor 4.1.4 Maximum</dd></div>
+          <div><dt>Verified result variant</dt><dd id="resultVariantLabel">No verified result</dd></div>
+          <div><dt>Precision catalog</dt><dd id="catalogCapacity">15,000 rules</dd></div>
+        </dl>
+      </section>
+    </aside>
+
+    <div class="workspace">
+      <header class="topbar">
+        <button class="icon-button menu-button" id="menuBtn" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">☰</button>
+        <div class="page-heading">
+          <span id="pageEyebrow">ENGINEERING + SECURITY</span>
+          <h1 id="pageTitle">Overview</h1>
+          <p id="pageDescription">Verification, coverage, and prioritized evidence from the latest local analysis.</p>
+        </div>
+        <div class="topbar-actions">
+          <button class="button secondary" id="themeBtn" aria-label="Switch color theme">Theme: dark</button>
+          <button class="button primary" id="newScanBtn">＋ New scan</button>
+        </div>
+      </header>
+
+      <main id="mainContent" tabindex="-1">
+        <section class="view active" id="view-overview" data-view-panel="overview" aria-labelledby="overviewTitle">
+          <div class="view-title-row">
+            <div><h2 id="overviewTitle">Engineering and security overview</h2><p>Outcome-first triage across code quality, architecture, dependencies, configuration, and security boundaries.</p></div>
+            <span class="scan-stamp" id="lastScanLabel">No scan yet</span>
+          </div>
+
+          <div class="metric-grid" aria-label="Latest scan metrics">
+            <article class="metric-card posture-card">
+              <div><span class="metric-label">Posture score</span><strong id="riskScore">—</strong><span id="riskLabel">Awaiting evidence</span></div>
+              <svg class="risk-ring" viewBox="0 0 44 44" role="img" aria-label="Posture score" id="riskRing">
+                <circle class="ring-track" cx="22" cy="22" r="18" pathLength="100"></circle>
+                <circle class="ring-value" id="riskRingValue" cx="22" cy="22" r="18" pathLength="100" stroke-dasharray="0 100"></circle>
+              </svg>
+            </article>
+            <article class="metric-card"><span class="metric-label">Total findings</span><strong id="totalFindings">0</strong><span>Parsed evidence</span></article>
+            <article class="metric-card critical"><span class="metric-label">Critical</span><strong id="criticalCount">0</strong><span>Immediate action</span></article>
+            <article class="metric-card high"><span class="metric-label">High</span><strong id="highCount">0</strong><span>Release blockers</span></article>
+            <article class="metric-card medium"><span class="metric-label">Medium</span><strong id="mediumCount">0</strong><span>Planned remediation</span></article>
+            <article class="metric-card low"><span class="metric-label">Low / info</span><strong id="lowCount">0</strong><span>Hardening backlog</span></article>
+            <article class="metric-card"><span class="metric-label">Attack paths</span><strong id="attackPathMetric">0</strong><span>Source-to-sink chains</span></article>
+            <article class="metric-card"><span class="metric-label">Verified results</span><strong id="improvementMetric">0</strong><span>Complete accepted sources</span></article>
+            <article class="metric-card"><span class="metric-label">Truth Guard</span><strong id="truthGuardMetric">—</strong><span id="truthGuardDetail">Awaiting evidence</span></article>
+            <article class="metric-card"><span class="metric-label">Calibration</span><strong id="calibrationMetric">—</strong><span id="calibrationDetail">Verified labels not loaded</span></article>
+            <article class="metric-card"><span class="metric-label">Execution fabric</span><strong id="fabricMetric">—</strong><span id="fabricDetail">Fail-closed capability unknown</span></article>
+            <article class="metric-card"><span class="metric-label">Evidence ledger</span><strong id="evidenceMetric">0</strong><span id="evidenceDetail">No ledger loaded</span></article>
+            <article class="metric-card"><span class="metric-label">Engineering Fabric</span><strong id="engineeringMetric">—</strong><span id="engineeringMetricDetail">Awaiting a 4.0 engineering result</span></article>
+            <article class="metric-card"><span class="metric-label">Security Fabric</span><strong id="securityFabricMetric">—</strong><span id="securityFabricMetricDetail">Awaiting a 4.0 security result</span></article>
+          </div>
+
+          <div class="overview-grid">
+            <article class="panel severity-panel">
+              <div class="panel-heading"><div><h3>Severity distribution</h3><p>Relative concentration in the active result.</p></div><span id="postureStatus" class="status-pill neutral">Not assessed</span></div>
+              <div class="severity-chart" id="severityChart" aria-label="Severity distribution chart">
+                <div><span><i class="severity-dot critical-dot"></i>Critical</span><progress id="criticalBar" max="1" value="0"></progress><b id="criticalBarCount">0</b></div>
+                <div><span><i class="severity-dot high-dot"></i>High</span><progress id="highBar" max="1" value="0"></progress><b id="highBarCount">0</b></div>
+                <div><span><i class="severity-dot medium-dot"></i>Medium</span><progress id="mediumBar" max="1" value="0"></progress><b id="mediumBarCount">0</b></div>
+                <div><span><i class="severity-dot low-dot"></i>Low / info</span><progress id="lowBar" max="1" value="0"></progress><b id="lowBarCount">0</b></div>
+              </div>
+            </article>
+
+            <article class="panel capacity-panel">
+              <div class="panel-heading"><div><h3>Analysis surface</h3><p>Bounded high-volume evidence, rendered without high-volume DOM.</p></div></div>
+              <div class="capacity-stat"><strong id="installedRules">15,000</strong><span>installed precision rules</span></div>
+              <ul class="check-list">
+                <li>Bounded 50–200 row result pages</li>
+                <li>Local-only execution and evidence</li>
+                <li>SARIF, JSON, Markdown, and HTML export</li>
+              </ul>
+            </article>
+
+            <article class="panel assurance-panel">
+              <div class="panel-heading"><div><h3>Attestor 4.1.4 assurance matrix</h3><p>Current evidence plus explicit compatibility-engine states.</p></div></div>
+              <div class="assurance-grid" aria-label="Attestor 4.0 and compatibility engine states">
+                <div><span>Symbolic paths</span><strong id="symbolicState">Not run</strong><small id="symbolicDetail">Python path and field evidence</small></div>
+                <div><span>Polyglot IR</span><strong id="polyglotState">Not run</strong><small id="polyglotDetail">Bounded lexical coverage</small></div>
+                <div><span>Dependency proof</span><strong id="dependencyState">Not run</strong><small id="dependencyDetail">Exact lockfile edges</small></div>
+                <div><span>Git intelligence</span><strong id="gitState">Not run</strong><small id="gitDetail">Read-only change impact</small></div>
+              </div>
+            </article>
+
+            <section class="fabric-dashboard" aria-labelledby="fabricDashboardTitle" aria-live="polite">
+              <div class="fabric-dashboard-heading">
+                <div><h3 id="fabricDashboardTitle">Attestor 4.1.4 Engineering and Security Fabric</h3><p>Bounded summaries of the report's top-level fabric objects. Missing evidence stays unavailable instead of being inferred.</p></div>
+                <span class="local-badge">REPORT-BOUND</span>
+              </div>
+              <div class="fabric-domain-grid">
+                <article class="panel fabric-domain-panel engineering-domain" aria-labelledby="engineeringFabricTitle">
+                  <div class="panel-heading"><div><h3 id="engineeringFabricTitle">Engineering Fabric</h3><p id="engineeringSummary">No top-level engineering result is loaded.</p></div><span class="status-pill neutral" id="engineeringStatus" role="status">Unavailable</span></div>
+                  <div class="proof-badges" aria-label="Engineering Fabric evidence states">
+                    <span class="proof-badge neutral" id="engineeringEvidenceBadge">Evidence unavailable</span>
+                    <span class="proof-badge neutral" id="engineeringCoverageBadge">Coverage unknown</span>
+                    <span class="proof-badge neutral" id="engineeringVerificationBadge">Verification unknown</span>
+                  </div>
+                  <dl class="fabric-stat-grid">
+                    <div><dt>Evidence entries</dt><dd id="engineeringEvidenceCount">0</dd></div>
+                    <div><dt>Coverage gaps</dt><dd id="engineeringGapCount">0</dd></div>
+                    <div><dt>Verified gates</dt><dd id="engineeringVerifiedCount">0</dd></div>
+                  </dl>
+                  <div class="fabric-capabilities"><h4>Observed capabilities</h4><ul id="engineeringCapabilities"><li>Awaiting a bounded Engineering Fabric report.</li></ul></div>
+                  <div class="fabric-limitations"><h4>Reported limitations &amp; gaps</h4><ul id="engineeringLimitations"><li>Awaiting reported coverage gaps and assurance limitations.</li></ul></div>
+                </article>
+
+                <article class="panel fabric-domain-panel security-domain" aria-labelledby="securityFabricTitle">
+                  <div class="panel-heading"><div><h3 id="securityFabricTitle">Security Fabric</h3><p id="securityFabricSummary">No top-level security_fabric result is loaded.</p></div><span class="status-pill neutral" id="securityFabricStatus" role="status">Unavailable</span></div>
+                  <div class="proof-badges" aria-label="Security Fabric evidence states">
+                    <span class="proof-badge neutral" id="securityFabricEvidenceBadge">Evidence unavailable</span>
+                    <span class="proof-badge neutral" id="securityFabricCoverageBadge">Coverage unknown</span>
+                    <span class="proof-badge neutral" id="securityFabricVerificationBadge">Verification unknown</span>
+                  </div>
+                  <dl class="fabric-stat-grid">
+                    <div><dt>Evidence entries</dt><dd id="securityFabricEvidenceCount">0</dd></div>
+                    <div><dt>Coverage gaps</dt><dd id="securityFabricGapCount">0</dd></div>
+                    <div><dt>Verified gates</dt><dd id="securityFabricVerifiedCount">0</dd></div>
+                  </dl>
+                  <div class="fabric-capabilities"><h4>Observed capabilities</h4><ul id="securityFabricCapabilities"><li>Awaiting a bounded Security Fabric report.</li></ul></div>
+                  <div class="fabric-limitations"><h4>Reported limitations &amp; gaps</h4><ul id="securityFabricLimitations"><li>Awaiting reported coverage gaps and assurance limitations.</li></ul></div>
+                </article>
+              </div>
+            </section>
+
+            <article class="panel recent-panel">
+              <div class="panel-heading"><div><h3>Top priorities</h3><p>Highest-risk findings from the latest run.</p></div><button class="text-button" data-view-link="findings">View all</button></div>
+              <div class="empty-state compact" id="overviewEmpty"><span aria-hidden="true">◇</span><strong>No evidence loaded</strong><p>Run a scan or open one from history.</p></div>
+              <div class="recent-findings" id="overviewRecent" role="list"></div>
+            </article>
+          </div>
+
+          <article class="panel raw-panel" id="log">
+            <div class="panel-heading"><div><h3>Raw report</h3><p id="rawMeta">No output available.</p></div><button class="button tertiary" id="copyRawBtn">Copy</button></div>
+            <pre id="rawOutput" tabindex="0">Run a scan to inspect the bounded raw report preview.</pre>
+          </article>
+        </section>
+
+        <section class="view" id="view-scan" data-view-panel="scan" aria-labelledby="scanTitle" hidden>
+          <div class="view-title-row"><div><h2 id="scanTitle">Configure analysis</h2><p>Choose a local code analysis or a separate non-coding research question. Attestor never uploads source code.</p></div></div>
+          <div class="scan-layout">
+            <form class="panel scan-form" id="scanForm">
+              <div class="field full-field">
+                <label for="prompt">Target or request</label>
+                <textarea id="prompt" rows="4" placeholder="C:\projects\service or ask Attestor a coding question" aria-describedby="targetHint"></textarea>
+                <small id="targetHint">Use a local file/folder path for analysis modes. Ctrl/⌘ + Enter starts the scan.</small>
+              </div>
+              <div class="field full-field">
+                <label for="scanMode">Analysis mode</label>
+                <select id="scanMode">
+                  <optgroup label="Attestor 4.1.4 maximum">
+                    <option value="attestor41" selected>Attestor 4.1.4 Maximum</option><option value="improve">Find and return improved result</option>
+                    <option value="semantic">Whole-program semantics</option><option value="supplychain">Supply-chain center</option>
+                     <option value="repositorymemory">Repository memory</option>
+                     <option value="computer41">Permissioned pathless computer scan</option>
+                     <option value="cjpcontrol">Cockroach authorized local file control</option>
+                     <option value="escapelab">Private sandbox escape lab (simulation only)</option>
+                  </optgroup>
+                  <optgroup label="Non-coding research">
+                    <option value="research">Deep public-web research</option>
+                  </optgroup>
+                  <optgroup label="Compatibility engines">
+                    <option value="attestor40">Attestor 4.0 compatibility mode</option>
+                    <option value="attestor35">Attestor 3.5 compatibility mode</option>
+                    <option value="attestor3">Attestor 3.0 compatibility mode</option>
+                  </optgroup>
+                  <optgroup label="Security">
+                    <option value="securitymax">Security Max</option><option value="cybermayhem">Cybersecurity Mayhem</option>
+                    <option value="cyber">Cyber Sentinel</option><option value="patchguard">Patch Guard</option>
+                    <option value="qualitygate">Quality Gate</option><option value="rarebugs">Rare Bugs</option>
+                  </optgroup>
+                  <optgroup label="Repository and quality">
+                    <option value="workspace">Workspace Scan</option><option value="mayhem">Coding Mayhem</option>
+                    <option value="attestor2">Attestor 2 Max</option><option value="project">Project Brain</option>
+                    <option value="grade">Python Grade</option><option value="nativegrade">Native Grade</option>
+                    <option value="polyglot">Polyglot Tiny Bugs</option><option value="codepower">Code Power</option>
+                  </optgroup>
+                  <optgroup label="Repair and generation">
+                    <option value="refine">Refine</option><option value="sieve">Sieve</option><option value="codemax">Code Max</option>
+                    <option value="patch">Patch Forge</option><option value="reproduce">Bug Reproducer</option>
+                    <option value="gauntlet">Mutation Gauntlet</option><option value="factory">Code Factory</option>
+                  </optgroup>
+                  <optgroup label="Utilities">
+                    <option value="chat">Chat / command</option><option value="arena">Code Arena</option>
+                    <option value="darwin">Darwin Search</option><option value="fixmemory">Fix Memory</option>
+                  </optgroup>
+                </select>
+              </div>
+              <section class="research-controls full-field" id="researchControls" aria-labelledby="researchControlsTitle" hidden>
+                <div>
+                  <strong id="researchControlsTitle">Explicit public-web authorization</strong>
+                  <p>Online access is off by default. Research is limited to the normal public web: no logins, paywalls, private networks, dark web, or form submissions.</p>
+                </div>
+                <label class="research-toggle"><input id="researchOnline" type="checkbox"> Allow bounded online search for this run</label>
+                <label class="research-toggle"><input id="researchFetchPages" type="checkbox" disabled> Fetch bounded public source pages and respect robots policy</label>
+                <small>Attestor receives only this question. Credentials are configured outside the browser and are never displayed in this interface.</small>
+              </section>
+              <section class="research-controls full-field" id="computerControls" aria-labelledby="computerControlsTitle" hidden>
+                <div>
+                  <strong id="computerControlsTitle">Explicit local discovery permission</strong>
+                  <p>No path is supplied. Attestor may discover eligible local code projects only after you consent for this run. Consent is cleared after every run.</p>
+                </div>
+                <label class="research-toggle"><input id="computerAuthorized" type="checkbox"> Allow bounded, read-only project discovery and scanning for this run</label>
+                <div class="computer-options">
+                  <div class="field"><label for="computerScope">Discovery scope</label><select id="computerScope"><option value="home" selected>My home folder</option><option value="fixed-drives">All local fixed drives (broader)</option></select></div>
+                  <div class="field"><label for="computerMaxProjects">Maximum projects</label><input id="computerMaxProjects" type="number" min="1" max="12" value="3"></div>
+                </div>
+                <label class="research-toggle"><input id="computerImprove" type="checkbox"> Prepare review-only improvement candidates when supported</label>
+                <small>Attestor skips protected system and credential areas, does not follow links, use the network, execute discovered code, write source files, or apply improvements. Results can have explicit coverage gaps.</small>
+              </section>
+              <section class="research-controls full-field" id="cjpControls" aria-labelledby="cjpControlsTitle" hidden>
+                <div>
+                  <strong id="cjpControlsTitle">Cockroach one-run local-file authorization</strong>
+                  <p>The target field must be a strict request JSON path supplied with the local files. An uncle/family relationship is not authority by itself: the request records the authorized file custodian's assertion, exact files, hashes, purpose, and expiry.</p>
+                </div>
+                <label class="research-toggle"><input id="cjpPermissionConfirmed" type="checkbox"> I confirm the named owner/custodian authorized this exact local-file operation</label>
+                <label class="research-toggle"><input id="cjpApply" type="checkbox"> In a second run, request the previously previewed exact transactional file edit</label>
+                <div class="field full-field" id="cjpPreviewEvidenceField">
+                  <label for="cjpPreviewEvidence">Prior preview evidence SHA-256</label>
+                  <input id="cjpPreviewEvidence" type="text" maxlength="64" pattern="[0-9a-f]{64}" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Paste preview_evidence_sha256 from the preview-only result" disabled>
+                  <small>Apply recomputes the preview and fails closed unless this exact digest still matches.</small>
+                </div>
+                <label class="research-toggle"><input id="cjpApplyConfirmed" type="checkbox" disabled> Separately confirm applying the exact previewed candidate with backup and rollback guards</label>
+                <small>This mode is Cockroach-only. It grants no TCS account, network, credential, administrator, shell, registry, service, or persistence authority. SQLite/database understanding is read-only and reports no business row values.</small>
+              </section>
+              <section class="research-controls full-field" id="escapeLabControls" aria-labelledby="escapeLabControlsTitle" hidden>
+                <div>
+                  <strong id="escapeLabControlsTitle">Private sandbox escape lab - simulation only</strong>
+                  <p>Attestor must find and explain planted escape paths in a deterministic in-memory policy graph. This never attempts to escape the real Windows host, a container, or the kernel.</p>
+                </div>
+                <small>No prompt, path, caller code, caller-controlled shell/process, network, host-file read/write, deletion, or persistent permission is available to the simulation. The report is session-only.</small>
+                <small>Satire: CJP is "comically more likely" to delete an important file. Actual automatic deletion authority: 0%; the joke changes no permission or behavior.</small>
+              </section>
+              <div class="field full-field" id="variantControls">
+                <label for="variantSelect">Attestor 4.1.4 variant</label>
+                <select id="variantSelect" aria-describedby="variantHint">
+                  <option value="cockroach-janta-party">Cockroach Janta Party · maximum</option>
+                  <option value="south-park" selected>South Park · balanced</option>
+                  <option value="gruppe-sechs">Gruppe Sechs · lightweight</option>
+                </select>
+                <small id="variantHint">South Park is the default. Per-worker and outer-process timeouts are distinct. Snapshot file/byte and graph-node ceilings apply to coding-static; inherited analyzers report their own caps and coverage gaps.</small>
+                <small id="cjpSatire" hidden>Satire: CJP has a “comically higher” chance of accidentally deleting important files. Actual automatic deletion authority: 0%; the joke changes no permission or behavior.</small>
+              </div>
+              <fieldset class="profile-field full-field" id="requestProfileControls" hidden>
+                <legend>Request pacing for legacy and utility modes</legend>
+                <div class="segment-control" id="profileControl">
+                  <button type="button" data-profile="quick"><strong>Quick</strong><span>60s · 4 results</span></button>
+                  <button type="button" data-profile="standard" class="active" aria-pressed="true"><strong>Standard</strong><span>120s · 8 results</span></button>
+                  <button type="button" data-profile="deep"><strong>Deep</strong><span>600s · 50 results</span></button>
+                </div>
+              </fieldset>
+              <div class="field" id="limitField" hidden><label for="limitInput">Result limit</label><input id="limitInput" type="number" min="1" max="100" value="8"></div>
+              <div class="field" id="timeoutField" hidden><label for="timeoutInput">Timeout (seconds)</label><input id="timeoutInput" type="number" min="1" max="600" value="120"></div>
+              <div class="field full-field"><label for="responseStyle">Response style</label><select id="responseStyle"><option value="professional">Professional</option><option value="concise">Concise</option><option value="mentor">Mentor</option><option value="direct">Direct</option><option value="executive">Executive</option><option value="classic">Classic Attestor</option></select></div>
+              <div class="form-actions full-field"><button class="button primary large" id="sendBtn" type="submit">Start analysis</button><button class="button danger large" id="cancelBtn" type="button" disabled>Cancel job</button></div>
+              <p class="form-note" id="configHint">Jobs use a bounded local worker queue and a per-launch session token.</p>
+            </form>
+
+            <aside class="panel live-panel" id="livePanel" aria-labelledby="liveTitle">
+              <div class="panel-heading"><div><h3 id="liveTitle">Live progress</h3><p id="jobDetail">Ready for a local analysis.</p></div><span class="status-pill neutral" id="jobState" role="status" aria-live="polite">Idle</span></div>
+              <progress id="jobProgress" max="100" value="0" aria-label="Scan progress"></progress>
+              <div class="live-meta"><span>Elapsed</span><strong id="liveElapsed">0.0s</strong></div>
+              <ol class="stage-list" aria-label="Analysis stages">
+                <li id="stageQueue"><span>1</span><div><strong>Queue</strong><small>Validate and schedule</small></div></li>
+                <li id="stageExecute"><span>2</span><div><strong>Analyze</strong><small>Run selected Attestor engine</small></div></li>
+                <li id="stageParse"><span>3</span><div><strong>Structure</strong><small>Parse evidence and metrics</small></div></li>
+                <li id="stageRender"><span>4</span><div><strong>Present</strong><small>Build bounded result pages</small></div></li>
+              </ol>
+              <div class="error-state" id="scanError" role="alert" hidden><strong>Analysis could not complete</strong><p></p><button class="text-button" type="button" data-view-link="scan">Review configuration</button></div>
+            </aside>
+          </div>
+
+          <article class="panel raw-panel" id="blindArenaPanel" aria-labelledby="blindArenaTitle">
+            <div class="panel-heading">
+              <div>
+                <h3 id="blindArenaTitle">Blind autonomous escape arena</h3>
+                <p>Separate abstract black-box exercise with persistent checkpoints and bounded episodes. It never calls the data-only planted-path lab, a shell, network, hypervisor, or host runtime.</p>
+              </div>
+              <span class="status-pill neutral" id="blindArenaStatus" role="status" aria-live="polite">Connecting</span>
+            </div>
+            <dl class="fabric-stat-grid" aria-label="Blind autonomous arena status">
+              <div><dt>Fixed objective</dt><dd id="blindArenaObjective">Escape</dd></div>
+              <div><dt>Episodes</dt><dd id="blindArenaEpisodes">0</dd></div>
+              <div><dt>Actions attempted</dt><dd id="blindArenaActions">0</dd></div>
+              <div><dt>Opaque frontier</dt><dd id="blindArenaFrontier">Unopened</dd></div>
+            </dl>
+            <div class="proof-badges" aria-label="Blind arena evidence verification">
+              <span class="proof-badge neutral" id="blindArenaReportProof">No verified episode report</span>
+              <span class="proof-badge neutral" id="blindArenaEscapeProof">Escape token and trace not verified</span>
+            </div>
+            <p id="blindArenaReason">Status has not been loaded.</p>
+            <div class="button-row">
+              <button class="button primary" id="blindArenaStartBtn" type="button" disabled>Start</button>
+              <button class="button tertiary" id="blindArenaStatusBtn" type="button" disabled>Refresh status</button>
+              <button class="button danger" id="blindArenaCancelBtn" type="button" disabled>Cancel</button>
+              <button class="button danger-outline" id="blindArenaResetBtn" type="button" disabled>Reset/new</button>
+            </div>
+            <small>There is no editable prompt, path, payload, arena graph, or overall arena deadline. Reset/new replaces only Attestor's fixed arena checkpoint and always requires an explicit confirmation.</small>
+          </article>
+        </section>
+
+        <section class="view" id="view-research" data-view-panel="research" aria-labelledby="researchTitle" hidden>
+          <div class="view-title-row"><div><h2 id="researchTitle">Research evidence</h2><p>Bounded non-coding research with source-resolved citations, possible disagreements, and explicit coverage gaps.</p></div><span class="status-pill neutral" id="researchStatus">No report</span></div>
+          <article class="panel research-summary-panel">
+            <span class="metric-label">Question</span><h3 id="researchQuestion">No research question loaded.</h3><p id="researchSummary">Select Deep public-web research. Online search remains off until explicitly enabled for that run.</p>
+            <div class="research-execution" id="researchExecution" aria-label="Research execution boundary"></div>
+          </article>
+          <div class="research-grid" id="researchResults" hidden>
+            <section class="panel research-claims-panel"><div class="panel-heading"><div><h3>Evidence-backed claims</h3><p>Each claim resolves to source IDs; extractive text is evidence, not independent proof.</p></div></div><div class="research-list" id="researchClaims" role="list"></div></section>
+            <section class="panel research-sources-panel"><div class="panel-heading"><div><h3>Source catalog</h3><p>Normal public-web URLs returned by the bounded provider.</p></div></div><div class="research-list" id="researchSources" role="list"></div></section>
+            <section class="panel"><div class="panel-heading"><div><h3>Possible disagreements</h3><p>Lexical signals requiring human adjudication, never presented as resolved truth.</p></div></div><div class="research-list" id="researchDisagreements" role="list"></div></section>
+            <section class="panel"><div class="panel-heading"><div><h3>Coverage and gaps</h3><p>What was and was not supported by this bounded run.</p></div></div><div class="research-list" id="researchCoverage" role="list"></div></section>
+          </div>
+          <div class="empty-state" id="researchEmpty"><span aria-hidden="true">R</span><strong>No research evidence loaded</strong><p>Configure a non-coding research question. Without online authorization Attestor returns an explicit abstention.</p><button class="button primary" data-quick-mode="research">Configure research</button></div>
+        </section>
+
+        <section class="view" id="view-findings" data-view-panel="findings" aria-labelledby="findingsTitle" hidden>
+          <div class="view-title-row"><div><h2 id="findingsTitle">Findings</h2><p>Filter, group, sort, and inspect evidence without rendering the entire catalog.</p></div><span class="scan-stamp" id="resultCount">0 findings</span></div>
+          <div class="panel filter-bar" role="search" aria-label="Finding filters">
+            <label class="search-field" for="resultSearch"><span aria-hidden="true">⌕</span><input id="resultSearch" type="search" placeholder="Search rule, path, evidence, remediation…"><kbd>/</kbd></label>
+            <label><span>Severity</span><select id="severityFilter"><option value="ALL">All</option><option value="CRITICAL">Critical</option><option value="HIGH">High</option><option value="MEDIUM">Medium</option><option value="LOW">Low / info</option></select></label>
+            <label><span>Sort</span><select id="sortSelect"><option value="risk">Risk first</option><option value="path">Path</option><option value="rule">Rule</option><option value="line">Line</option></select></label>
+            <label><span>Group</span><select id="groupSelect"><option value="none">No groups</option><option value="severity">Severity</option><option value="file">File</option><option value="rule">Rule</option></select></label>
+            <label><span>Rows</span><select id="pageSize"><option>50</option><option selected>100</option><option>200</option></select></label>
+            <button class="button tertiary" id="clearFiltersBtn">Reset</button>
+          </div>
+          <div class="finding-list" id="findingList" role="list" aria-live="polite"></div>
+          <div class="empty-state" id="findingsEmpty"><span aria-hidden="true">✓</span><strong>No findings to show</strong><p>Run a scan, open history, or clear the active filters.</p><button class="button primary" data-view-link="scan">Configure scan</button></div>
+          <nav class="pagination" id="findingsPagination" aria-label="Finding pages" hidden><button class="button secondary" id="prevPageBtn">← Previous</button><span id="pageLabel">Page 1</span><button class="button secondary" id="nextPageBtn">Next →</button></nav>
+        </section>
+
+        <section class="view" id="view-attacks" data-view-panel="attacks" aria-labelledby="attacksTitle" hidden>
+          <div class="view-title-row"><div><h2 id="attacksTitle">Attack paths</h2><p>Evidence-linked source, boundary, propagation, and sink steps from Attestor's semantic and security engines.</p></div><span class="scan-stamp" id="attackPathCount">0 paths</span></div>
+          <div class="attack-path-list" id="attackPathList" role="list" aria-live="polite"></div>
+          <div class="empty-state" id="attackPathEmpty"><span aria-hidden="true">A</span><strong>No attack paths loaded</strong><p>Run Attestor 4.1.4 Maximum or whole-program semantics against a local project.</p><button class="button primary" data-quick-mode="attestor41">Run maximum analysis</button></div>
+        </section>
+
+        <section class="view" id="view-command" data-view-panel="command" aria-labelledby="commandTitle" hidden>
+          <div class="view-title-row">
+            <div><h2 id="commandTitle">Security command center</h2><p>Bounded risk, attack-path, regression, repair-evidence, and authorization status with explicit digest freshness.</p></div>
+            <span class="status-pill neutral" id="commandStatus" role="status">Unavailable</span>
+          </div>
+          <div class="command-center-grid" id="commandCenterGrid" hidden>
+            <article class="panel command-summary-panel">
+              <div class="panel-heading"><div><h3>Bounded security posture</h3><p>Counts come from the loaded report and retain its explicit coverage gaps.</p></div></div>
+              <dl class="command-metrics" id="commandMetrics">
+                <div><dt>Findings</dt><dd>0</dd></div><div><dt>Attack paths</dt><dd>0</dd></div>
+                <div><dt>Coverage gaps</dt><dd>0</dd></div><div><dt>Critical / high</dt><dd>0 / 0</dd></div>
+              </dl>
+            </article>
+            <article class="panel">
+              <div class="panel-heading"><div><h3>Claim evidence states</h3><p>Proof is shown only for freshly verified durable reports; other proof labels are downgraded.</p></div></div>
+              <dl class="command-metrics compact" id="commandClaimStates"></dl>
+            </article>
+            <article class="panel command-wide">
+              <div class="panel-heading"><div><h3>Highest-ranked attack paths</h3><p>Static reachability is not represented as successful exploitation.</p></div></div>
+              <div class="command-list" id="commandAttackPaths" role="list"></div>
+            </article>
+            <article class="panel">
+              <div class="panel-heading"><div><h3>Repair verification state</h3><p>Reported gate evidence remains unverified until an authenticated runner proves it; applying still requires one-use approval.</p></div></div>
+              <dl class="command-state-list"><div><dt>Pipeline</dt><dd id="commandRepair">Not started</dd></div><div><dt>Regression</dt><dd id="commandRegression">Not compared</dd></div><div><dt>Automatic apply</dt><dd id="commandApproval">Unavailable</dd></div></dl>
+            </article>
+            <article class="panel">
+              <div class="panel-heading"><div><h3>Coverage gaps</h3><p>Unknown or refused areas remain visible.</p></div></div>
+              <ul class="command-gap-list" id="commandGaps"><li>No command-center evidence is loaded.</li></ul>
+            </article>
+          </div>
+          <div class="empty-state" id="commandEmpty"><span aria-hidden="true">C</span><strong>No 4.1.4 command-center evidence</strong><p>Run Attestor 4.1.4 Maximum. Missing command-center data is shown as unavailable, never inferred.</p><button class="button primary" data-quick-mode="attestor41">Run maximum analysis</button></div>
+        </section>
+
+        <section class="view" id="view-improvements" data-view-panel="improvements" aria-labelledby="improvementsTitle" hidden>
+          <div class="view-title-row"><div><h2 id="improvementsTitle">Verified improved results</h2><p>Accepted candidates include the complete improved source and diff. Refusals stay explicit and are never presented as fixes.</p></div><span class="scan-stamp" id="verifiedImprovementCount">0 verified</span></div>
+          <div class="improvement-list" id="improvementList" role="list" aria-live="polite"></div>
+          <div class="empty-state" id="improvementEmpty"><span aria-hidden="true">+</span><strong>No verified result loaded</strong><p>Run Find and return improved result. Attestor will show a complete accepted source or explain why it refused to guess.</p><button class="button primary" data-quick-mode="improve">Find and improve</button></div>
+        </section>
+
+        <section class="view" id="view-compare" data-view-panel="compare" aria-labelledby="compareTitle" hidden>
+          <div class="view-title-row"><div><h2 id="compareTitle">Compare scans</h2><p>See new, resolved, and persistent evidence between two local runs.</p></div></div>
+          <div class="panel compare-controls"><label>Baseline<select id="compareA"><option value="">Select a scan</option></select></label><span aria-hidden="true">→</span><label>Current<select id="compareB"><option value="">Select a scan</option></select></label><button class="button primary" id="compareBtn">Compare</button></div>
+          <div class="compare-notice" id="compareNotice" role="status" hidden></div>
+          <div class="empty-state" id="compareEmpty"><span aria-hidden="true">⇄</span><strong>Two scans are required</strong><p>Run Attestor twice or choose existing history entries.</p></div>
+          <section id="diffPanel" hidden>
+            <div class="compare-summary" id="compareSummary"></div>
+            <article class="panel diff-panel"><div class="panel-heading"><div><h3>Bounded line diff</h3><p>First 500 lines from each report.</p></div></div><pre id="diffOutput" tabindex="0"></pre></article>
+          </section>
+        </section>
+
+        <section class="view" id="view-history" data-view-panel="history" aria-labelledby="historyTitle" hidden>
+          <div class="view-title-row"><div><h2 id="historyTitle">Run history</h2><p>Durable, bounded server-side evidence. Exports are canonical verified artifacts, never browser reconstructions.</p></div><div class="button-row"><button class="button tertiary" id="exportJsonBtn">Verified JSON</button><button class="button tertiary" id="exportSarifBtn">Verified SARIF</button><button class="button danger-outline" id="clearBtn">Clear history</button></div></div>
+          <div class="history-picker"><label for="historySelect">Open a run</label><select id="historySelect"><option value="">Select history</option></select><button class="button secondary" id="openHistoryBtn">Open</button></div>
+          <div class="history-list" id="historyList" role="list"></div>
+          <div class="empty-state" id="historyEmpty"><span aria-hidden="true">◷</span><strong>No saved scans</strong><p>Machine-readable completed runs appear in the bounded local evidence store.</p></div>
+        </section>
+
+        <section class="view" id="view-evidence" data-view-panel="evidence" aria-labelledby="evidenceExplorerTitle" hidden>
+          <div class="view-title-row"><div><h2 id="evidenceExplorerTitle">Evidence explorer</h2><p>Inspect exact source bindings, producer digests, coverage gaps, triage, and expiring suppressions.</p></div><span class="status-pill neutral" id="evidenceExplorerStatus">No report</span></div>
+          <article class="panel evidence-explorer-summary" id="evidenceExplorerSummary">Open a guarded report to inspect its source-bound evidence ledger.</article>
+          <div class="evidence-explorer-list" id="evidenceExplorerList" role="list"></div>
+          <div class="empty-state" id="evidenceExplorerEmpty"><span aria-hidden="true">E</span><strong>No source-bound entries</strong><p>Unbound or absent evidence is shown as unavailable, never inferred.</p></div>
+        </section>
+      </main>
+
+      <footer class="statusbar"><span><i class="status-dot ready" aria-hidden="true"></i>Attestor 4.2 distribution</span><span>4.1.4 analysis engine/protocol · 4.1/4.0/3.5/3.0 compatible · Durable bounded history · Jobs are cancellable · No source upload</span></footer>
+    </div>
+  </div>
+
+  <aside class="finding-drawer" id="findingDrawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" hidden>
+    <div class="drawer-header"><div><span class="severity-badge" id="drawerSeverity">HIGH</span><h2 id="drawerTitle">Finding detail</h2></div><button class="icon-button" id="drawerClose" aria-label="Close finding detail">×</button></div>
+    <div class="drawer-body">
+      <dl class="detail-grid"><div><dt>Rule</dt><dd id="drawerRule">—</dd></div><div><dt>Location</dt><dd id="drawerLocation">—</dd></div><div><dt>Fingerprint</dt><dd id="drawerFingerprint">—</dd></div></dl>
+      <section><h3>Why this matters</h3><p id="drawerMessage">—</p></section>
+      <section><h3>Evidence</h3><pre id="drawerEvidence">—</pre></section>
+      <section class="remediation-box"><h3>Recommended remediation</h3><p id="drawerFix">—</p></section>
+      <section class="annotation-box" aria-labelledby="annotationTitle"><h3 id="annotationTitle">Triage and suppression</h3><div class="annotation-grid"><label>Owner<input id="triageOwner" maxlength="200" autocomplete="off"></label><label>State<select id="triageState"><option>open</option><option>investigating</option><option>fixed</option><option>false-positive</option><option>accepted-risk</option></select></label><label class="annotation-wide">Reason<textarea id="triageReason" rows="2" maxlength="2000"></textarea></label><label>Suppression expires<input id="suppressionExpiry" type="datetime-local"></label></div><div class="button-row"><button class="button secondary" id="saveTriageBtn">Save triage</button><button class="button danger-outline" id="suppressFindingBtn">Suppress until expiry</button></div><p class="annotation-note" id="annotationStatus" role="status">Owner and reason are mandatory. Suppressions always expire.</p></section>
+      <button class="button secondary" id="copyFindingBtn">Copy finding</button>
+    </div>
+  </aside>
+
+  <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
+  <script src="/ui23.js" defer></script>
+</body>
+</html>

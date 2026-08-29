@@ -1,0 +1,56 @@
+# Build artifacts from the demos (see `make clean`).
+*.out
+a.out
+*.o
+*.hi
+demo.txt
+
+# Python detector artifacts
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.owen-cache.json
+.owen_ui_*.log
+.ui*-server.*
+
+# codegen / harvest output
+generated_service/
+owen_harvest/
+*.db
+*.sqlite
+*.sqlite3
+.venv/
+.venv-*/
+.billing-test/
+*.entitlement
+*.token
+
+# real API keys live here -- never commit them (keys.env.example is the template)
+keys.env
+detector/keys.env
+.env
+detector/.env
+*.local.env
+!*.env.example
+
+# self-extracted duplicate trees (huge, redundant copies of the project itself)
+*_extracted/
+detector/Attestor 4.2_extracted/
+detector/test_extracted/
+
+# generated reports / scan output (regenerate with `attestor report` / `evaluate`)
+attestor-report.html
+attestor-self-report.html
+flywheel_pairs.jsonl
+.attestor-triage.json
+.attestor-baseline.json
+
+# model weights and GGUF exports (too large / built by training notebooks)
+*.gguf
+
+# external benchmark corpus (fetched by OPENCODE_TASK_corpus.md; reproducible)
+corpus/raw/
+corpus/samples/

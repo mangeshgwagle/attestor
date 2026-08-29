@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Darwin Payloads — Defensive Research Browser</title>
+  <link rel="stylesheet" href="viewer.css">
+</head>
+<body>
+  <a class="skip-link" href="#mainContent">Skip to payloads</a>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Payload categories">
+      <div class="logo"><span aria-hidden="true">🧬</span> Darwin Payloads</div>
+      <label class="search-label" for="searchBox">Search the local corpus</label>
+      <input id="searchBox" class="search-box" type="search" maxlength="200"
+             placeholder="Search payloads…" autocomplete="off">
+      <nav aria-label="Categories">
+        <ul class="category-list" id="categoryList"></ul>
+      </nav>
+    </aside>
+
+    <main class="main" id="mainContent" tabindex="-1">
+      <header class="toolbar">
+        <div>
+          <p class="eyebrow">OFFLINE DEFENSIVE RESEARCH</p>
+          <h1 id="viewTitle">Select a category</h1>
+        </div>
+        <p class="stats" id="stats" aria-live="polite"></p>
+      </header>
+
+      <div class="content">
+        <div class="notice" role="note">
+          Payload text is rendered inert. Copy it only into an authorized test environment.
+        </div>
+
+        <div class="tabs hidden" id="tabs" role="tablist" aria-label="Category views">
+          <button class="tab active" id="payloadsTab" type="button" role="tab"
+                  aria-selected="true" aria-controls="payloadsView" data-tab="payloads">Payloads</button>
+          <button class="tab" id="readmeTab" type="button" role="tab"
+                  aria-selected="false" aria-controls="readmeView" data-tab="readme">README source</button>
+          <button class="tab" id="intrudersTab" type="button" role="tab"
+                  aria-selected="false" aria-controls="intrudersView" data-tab="intruders">Intruder files</button>
+        </div>
+
+        <section id="payloadsView" class="payload-grid hidden" role="tabpanel"
+                 aria-labelledby="payloadsTab" tabindex="0"></section>
+        <section id="readmeView" class="readme-view hidden" role="tabpanel"
+                 aria-labelledby="readmeTab" tabindex="0"></section>
+        <section id="intrudersView" class="payload-grid hidden" role="tabpanel"
+                 aria-labelledby="intrudersTab" tabindex="0"></section>
+
+        <section class="empty-state" id="emptyState" aria-live="polite">
+          <h2><span aria-hidden="true">🧬</span> Darwin payload collection</h2>
+          <p>Select a category to browse locally bundled research data.</p>
+          <p class="muted">Payload markup is displayed as text and is never executed.</p>
+        </section>
+      </div>
+    </main>
+  </div>
+  <script src="viewer.js" defer></script>
+</body>
+</html>

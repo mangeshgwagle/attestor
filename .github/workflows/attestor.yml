@@ -1,0 +1,93 @@
+name: Attestor Security Scan
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  security-scan:
+    name: Attestor Security Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run Attestor Secret Scanner
+        run: |
+          python detector/cli.py secrets . --json > secrets-results.json 2>&1 || true
+          echo "::group::Secret Scanner Results"
+          cat secrets-results.json
+          echo "::endgroup::"
+
+      - name: Run Attestor Exploit Detector
+        run: |
+          python detector/cli.py exploits . --json > exploit-results.json 2>&1 || true
+          echo "::group::Exploit Detector Results"
+          cat exploit-results.json
+          echo "::endgroup::"
+
+      - name: Run Attestor IaC Scanner
+        run: |
+          python detector/cli.py iac . --json > iac-results.json 2>&1 || true
+          echo "::group::IaC Scanner Results"
+          cat iac-results.json
+          echo "::endgroup::"
+
+      - name: Run Attestor Python Scanner
+        run: |
+          python detector/cli.py scan . --json > scan-results.json 2>&1 || true
+          echo "::group::Python Scanner Results"
+          cat scan-results.json
+          echo "::endgroup::"
+
+      - name: Generate SARIF output
+        run: |
+          python detector/cli.py full . --format sarif --out attestor-results.sarif 2>&1 || true
+
+      - name: Upload SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: attestor-results.sarif
+          category: attestor
+
+      - name: Check for critical findings
+        run: |
+          CRITICAL_SECRETS=$(python -c "
+          import json, sys
+          try:
+              data = json.load(open('secrets-results.json'))
+              critical = [f for f in data if f.get('severity') == 'CRITICAL']
+              print(len(critical))
+          except: print(0)
+          " 2>/dev/null || echo 0)
+
+          CRITICAL_EXPLOITS=$(python -c "
+          import json, sys
+          try:
+              data = json.load(open('exploit-results.json'))
+              critical = [f for f in data if f.get('severity') == 'CRITICAL']
+              print(len(critical))
+          except: print(0)
+          " 2>/dev/null || echo 0)
+
+          echo "Critical secrets: $CRITICAL_SECRETS"
+          echo "Critical exploits: $CRITICAL_EXPLOITS"
+
+          if [ "$CRITICAL_SECRETS" -gt 0 ] || [ "$CRITICAL_EXPLOITS" -gt 0 ]; then
+            echo "::error::Critical security findings detected!"
+            exit 1
+          fi

@@ -1,0 +1,451 @@
+#!/usr/bin/env python3
+"""Unified, fail-closed command line for the reviewed Attestor 4.2 surface."""
+from __future__ import annotations
+
+import argparse
+from dataclasses import asdict
+import importlib
+import json
+import os
+from pathlib import Path
+import stat
+import subprocess
+import sys
+from typing import Any, Iterable
+
+
+VERSION = "4.2"
+EXIT_CLEAN = 0
+EXIT_FINDINGS = 1
+EXIT_INVALID = 2
+EXIT_INCOMPLETE = 3
+EXIT_OPERATIONAL = 4
+GATED_COMMANDS = ("review", "fix", "pro", "ui")
+MAX_SCOPE_ENTRIES = 200_000
+
+# Keep direct invocation from dirtying the release before `verify` audits it.
+sys.dont_write_bytecode = True
+ROOT = Path(__file__).resolve(strict=True).parent
+DETECTOR = ROOT / "detector"
+ATTESTORLANG_CLI = ROOT / "integrations" / "attestorlang" / "cli.py"
+CONTROL_CLI = DETECTOR / "owner_control42.py"
+PHARMA_CLI = ROOT / "integrations" / "attestor_chem" / "cli.py"
+ENTERPRISE_LAB_CLI = ROOT / "experiments" / "enterprise_security42" / "lab.py"
+ASSURANCE_CLI = DETECTOR / "assurance42.py"
+
+
+class ScopeError(ValueError):
+    """The requested scan scope cannot be inspected without escaping it."""
+
+
+def _write_diagnostic(message: str) -> None:
+    print("attestor: " + message[:500], file=sys.stderr)
+
+
+def _unexpected(operation: str, exc: BaseException) -> int:
+    _write_diagnostic(
+        "%s failed (%s); no result was accepted" %
+        (operation, type(exc).__name__))
+    return EXIT_OPERATIONAL
+
+
+def _is_link_or_reparse(path: Path, info: os.stat_result) -> bool:
+    if stat.S_ISLNK(info.st_mode):
+        return True
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    if int(getattr(info, "st_file_attributes", 0)) & reparse_flag:
+        return True
+    junction_check = getattr(path, "is_junction", None)
+    if junction_check is not None:
+        try:
+            return bool(junction_check())
+        except OSError as exc:
+            raise ScopeError("cannot inspect a possible junction: %s" % path) from exc
+    return False
+
+
+def _absolute_without_following(path: Path) -> Path:
+    expanded = path.expanduser()
+    if not expanded.is_absolute():
+        expanded = Path.cwd() / expanded
+    return Path(os.path.abspath(os.fspath(expanded)))
+
+
+def _lstat_unlinked_chain(candidate: Path, raw: str) -> os.stat_result:
+    anchor = Path(candidate.anchor)
+    current = anchor
+    final_info: os.stat_result | None = None
+    parts = candidate.parts[1:] if candidate.anchor else candidate.parts
+    for part in parts:
+        current = current / part
+        try:
+            final_info = current.lstat()
+        except FileNotFoundError as exc:
+            raise ScopeError("scan target does not exist: %s" % raw) from exc
+        except OSError as exc:
+            raise ScopeError("scan target is unavailable: %s" % raw) from exc
+        if _is_link_or_reparse(current, final_info):
+            raise ScopeError(
+                "linked or reparse-point scan path is refused: %s" % current)
+    if final_info is None:
+        try:
+            final_info = candidate.lstat()
+        except OSError as exc:
+            raise ScopeError("scan target is unavailable: %s" % raw) from exc
+        if _is_link_or_reparse(candidate, final_info):
+            raise ScopeError(
+                "linked or reparse-point scan target is refused: %s" % raw)
+    return final_info
+
+
+def _validate_one_scope(raw: str) -> Path:
+    candidate = _absolute_without_following(Path(raw))
+    root_info = _lstat_unlinked_chain(candidate, raw)
+    if not (stat.S_ISREG(root_info.st_mode) or stat.S_ISDIR(root_info.st_mode)):
+        raise ScopeError("scan target must be a regular file or directory: %s" % raw)
+
+    if stat.S_ISDIR(root_info.st_mode):
+        stack = [candidate]
+        entries_seen = 0
+        while stack:
+            directory = stack.pop()
+            try:
+                with os.scandir(directory) as entries:
+                    children = sorted(entries, key=lambda item: item.name.casefold())
+            except OSError as exc:
+                raise ScopeError(
+                    "cannot inspect scan scope directory: %s" % directory) from exc
+            for entry in children:
+                entries_seen += 1
+                if entries_seen > MAX_SCOPE_ENTRIES:
+                    raise ScopeError(
+                        "scan scope exceeds the %d-entry boundary" %
+                        MAX_SCOPE_ENTRIES)
+                child = Path(entry.path)
+                try:
+                    child_info = entry.stat(follow_symlinks=False)
+                except OSError as exc:
+                    raise ScopeError(
+                        "cannot inspect scan scope entry: %s" % child) from exc
+                if _is_link_or_reparse(child, child_info):
+                    raise ScopeError(
+                        "linked or reparse-point entry is refused: %s" % child)
+                if stat.S_ISDIR(child_info.st_mode):
+                    stack.append(child)
+                elif not stat.S_ISREG(child_info.st_mode):
+                    raise ScopeError(
+                        "non-regular scan scope entry is refused: %s" % child)
+
+    try:
+        return candidate.resolve(strict=True)
+    except OSError as exc:
+        raise ScopeError("scan target could not be resolved: %s" % raw) from exc
+
+
+def _validate_scopes(paths: Iterable[str]) -> list[Path]:
+    return [_validate_one_scope(path) for path in paths]
+
+
+def _within(candidate: Path, root: Path) -> bool:
+    candidate_text = os.path.normcase(os.fspath(candidate))
+    root_text = os.path.normcase(os.fspath(root))
+    if root.is_file():
+        return candidate_text == root_text
+    try:
+        return os.path.commonpath((candidate_text, root_text)) == root_text
+    except ValueError:
+        return False
+
+
+def _validate_result_scope(result: Any, roots: list[Path]) -> None:
+    reported = [getattr(item, "path", "") for item in result.files]
+    reported.extend(getattr(item, "path", "") for item in result.issues)
+    for raw in reported:
+        if not isinstance(raw, str) or not raw:
+            raise ScopeError("scan engine returned an invalid result path")
+        try:
+            candidate = Path(raw).resolve(strict=True)
+        except OSError as exc:
+            raise ScopeError("scan result path changed during analysis") from exc
+        if not any(_within(candidate, root) for root in roots):
+            raise ScopeError("scan engine returned an out-of-scope path")
+
+
+def _load_detector_module(name: str) -> Any:
+    resolved = DETECTOR.resolve(strict=True)
+    resolved.relative_to(ROOT)
+    detector_text = os.fspath(resolved)
+    if detector_text not in sys.path:
+        sys.path.insert(0, detector_text)
+    return importlib.import_module(name)
+
+
+def _scan_exit(result: Any) -> int:
+    if result.errors:
+        return EXIT_OPERATIONAL
+    if (result.files_scanned == 0 or result.skipped
+            or result.status in {"unsupported", "failed"}):
+        return EXIT_INCOMPLETE
+    if any(getattr(item, "verification", "unverified") != "verified"
+           for item in result.files):
+        return EXIT_INCOMPLETE
+    if result.status == "findings" or result.issues:
+        return EXIT_FINDINGS
+    if result.status == "clean":
+        return EXIT_CLEAN
+    return EXIT_OPERATIONAL
+
+
+def _render_scan(result: Any, output_format: str, engine: Any,
+                 exit_code: int) -> None:
+    cli_status = {
+        EXIT_CLEAN: "clean",
+        EXIT_FINDINGS: "findings",
+        EXIT_INCOMPLETE: "incomplete",
+        EXIT_OPERATIONAL: "operational-failure",
+    }.get(exit_code, "invalid")
+    if output_format == "json":
+        payload = asdict(result)
+        payload["cli_status"] = cli_status
+        payload["cli_exit_code"] = exit_code
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return
+    if output_format == "sarif":
+        payload = engine.to_sarif(result)
+        run = payload.setdefault("runs", [{}])[0]
+        run["properties"] = {
+            "attestorCliStatus": cli_status,
+            "attestorCliExitCode": exit_code,
+            "filesDiscovered": result.files_discovered,
+            "filesScanned": result.files_scanned,
+            "skipped": list(result.skipped),
+            "errors": list(result.errors),
+        }
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return
+    if output_format == "markdown":
+        print("# Attestor 4.2 unified scan result")
+        print("\n- CLI status: **%s**" % cli_status)
+        print("- Exit status: **%d**\n" % exit_code)
+        print(engine.render_markdown(result))
+        if result.skipped:
+            print("\n## Incomplete coverage\n")
+            for reason in result.skipped:
+                print("- " + reason)
+        return
+    if output_format == "html":
+        document = engine.render_html(result)
+        banner = (
+            "<section><h1>Attestor 4.2 unified scan result</h1>"
+            "<p>CLI status: <strong>%s</strong> &middot; exit status: %d</p>"
+            "</section>" % (cli_status, exit_code))
+        print(document.replace("<h1>", banner + "<h1>", 1))
+        return
+
+    print("Attestor 4.2 static workspace scan: %s" % cli_status)
+    print("engine_status=%s files=%d findings=%d cache_hits=%d elapsed_ms=%d" % (
+        result.status, result.files_scanned, len(result.issues),
+        result.cache_hits, result.elapsed_ms))
+    for reason in result.skipped:
+        print("SKIPPED: " + reason)
+    for issue in result.issues:
+        print("%s:%d [%s] %s - %s" % (
+            issue.path, issue.line, issue.severity, issue.rule, issue.message))
+    for error in result.errors:
+        print("ERROR: " + error, file=sys.stderr)
+
+
+def _run_scan(args: argparse.Namespace) -> int:
+    try:
+        roots = _validate_scopes(args.paths)
+    except ScopeError as exc:
+        _write_diagnostic(str(exc))
+        return EXIT_INVALID
+    except BaseException as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
+        return _unexpected("scan scope validation", exc)
+
+    try:
+        engine = _load_detector_module("scanengine")
+        result = engine.scan(
+            [os.fspath(path) for path in roots],
+            jobs=args.jobs,
+            deep=args.deep,
+            tools=False,
+            use_cache=False,
+            cache_path="",
+            max_bytes=engine.DEFAULT_MAX_BYTES,
+        )
+        # Recheck both the tree and every reported path after analysis. This
+        # catches link replacement and rejects any engine scope escape.
+        _validate_scopes(os.fspath(path) for path in roots)
+        _validate_result_scope(result, roots)
+        exit_code = _scan_exit(result)
+        _render_scan(result, args.format, engine, exit_code)
+        return exit_code
+    except ScopeError as exc:
+        _write_diagnostic(str(exc))
+        return EXIT_OPERATIONAL
+    except BaseException as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
+        return _unexpected("scan", exc)
+
+
+def _trusted_child(path: Path, arguments: list[str]) -> int:
+    try:
+        resolved = path.resolve(strict=True)
+        resolved.relative_to(ROOT)
+        completed = subprocess.run(
+            [sys.executable, "-I", "-B", "-X", "utf8", os.fspath(resolved),
+             *arguments],
+            shell=False,
+            check=False,
+        )
+        return int(completed.returncode)
+    except BaseException as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
+        return _unexpected("isolated child command", exc)
+
+
+def _run_verify() -> int:
+    try:
+        _validate_one_scope(os.fspath(ROOT))
+        hardening = _load_detector_module("release_hardening")
+        report = hardening.audit_tree(ROOT)
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return EXIT_CLEAN if report.get("ok") is True else EXIT_FINDINGS
+    except ScopeError:
+        print(json.dumps({
+            "schema": "attestor-release-preflight/4.2",
+            "ok": False,
+            "audit_complete": False,
+            "error": "release tree contains a linked, reparse, or non-regular entry",
+        }, indent=2, sort_keys=True))
+        return EXIT_INCOMPLETE
+    except BaseException as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
+        return _unexpected("release audit", exc)
+
+
+def _jobs(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("jobs must be an integer") from exc
+    if not 1 <= number <= 32:
+        raise argparse.ArgumentTypeError("jobs must be between 1 and 32")
+    return number
+
+
+def _run_assure(arguments: list[str]) -> int:
+    """Accept only the reviewed assurance surface before child dispatch."""
+    parser = argparse.ArgumentParser(
+        prog="attestor assure",
+        description="Run the experimental read-only assurance report.",
+        allow_abbrev=False,
+    )
+    parser.add_argument("directory", help="directory to inspect without execution")
+    parser.add_argument("--format", choices=("text", "json"), default="text")
+    args = parser.parse_args(arguments)
+    exit_code = _trusted_child(
+        ASSURANCE_CLI,
+        ["--format", args.format, "--", args.directory],
+    )
+    if exit_code not in {
+            EXIT_CLEAN, EXIT_FINDINGS, EXIT_INVALID, EXIT_INCOMPLETE,
+            EXIT_OPERATIONAL}:
+        _write_diagnostic(
+            "assurance returned an invalid exit status; no result was accepted")
+        return EXIT_OPERATIONAL
+    return exit_code
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="attestor",
+        description="Unified, fail-closed command line for Attestor 4.2.",
+        allow_abbrev=False,
+    )
+    parser.add_argument("--version", action="version", version="Attestor 4.2 (attestor 4.2)")
+    commands = parser.add_subparsers(dest="command", required=True)
+
+    scan_parser = commands.add_parser(
+        "scan", help="run a static, uncached scan without external tools",
+        allow_abbrev=False)
+    scan_parser.add_argument("paths", nargs="+", help="regular files or directories")
+    scan_parser.add_argument("--jobs", type=_jobs, default=min(8, os.cpu_count() or 1))
+    scan_parser.add_argument("--deep", action="store_true")
+    scan_parser.add_argument(
+        "--format", choices=("text", "json", "sarif", "markdown", "html"),
+        default="text")
+
+    commands.add_parser("lang", help="pass arguments to AttestorLang 4.2")
+    commands.add_parser("control", help="pass arguments to Owner Control 4.2")
+    commands.add_parser(
+        "pharma", help="study pharmaceutical formation and dosage methods")
+    commands.add_parser(
+        "lab", help="run the offline synthetic enterprise-security lab")
+    commands.add_parser(
+        "assure", help="run experimental read-only repository assurance")
+    commands.add_parser("verify", help="audit this release tree without writing it")
+    commands.add_parser("status", help="show the phase-one command availability")
+    for command in GATED_COMMANDS:
+        commands.add_parser(command, help="gated pending remediation review")
+    return parser
+
+
+def _status() -> None:
+    print("Attestor 4.2 unified CLI")
+    print("available: scan, lang, control, pharma, lab, assure, verify, status")
+    print("gated: " + ", ".join(GATED_COMMANDS))
+    print("scan policy: static only; external tools off; cache off; links refused")
+    print("lab policy: bundled synthetic fixtures only; offline; read-only")
+    print("assure policy: exactly one fixed Python child; no target/tool subprocesses")
+    print("assure coverage: missing history/provenance/lock evidence is incomplete")
+
+
+def main(argv: list[str] | None = None) -> int:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments and arguments[0] == "lang":
+        return _trusted_child(ATTESTORLANG_CLI, arguments[1:])
+    if arguments and arguments[0] == "control":
+        return _trusted_child(CONTROL_CLI, arguments[1:])
+    if arguments and arguments[0] == "pharma":
+        return _trusted_child(PHARMA_CLI, arguments[1:])
+    if arguments and arguments[0] == "lab":
+        return _trusted_child(ENTERPRISE_LAB_CLI, arguments[1:])
+    if arguments and arguments[0] == "assure":
+        return _run_assure(arguments[1:])
+    if arguments and arguments[0] in GATED_COMMANDS:
+        _write_diagnostic(
+            "%s is intentionally gated in the phase-one CLI" % arguments[0])
+        return EXIT_INCOMPLETE
+    if arguments and arguments[0] == "scan":
+        forbidden = ("--tools", "--cache", "--no-cache", "--max-bytes")
+        for token in arguments[1:]:
+            if any(token == option or token.startswith(option + "=")
+                   for option in forbidden):
+                _write_diagnostic(
+                    "%s is disabled by the phase-one scan policy" %
+                    token.split("=", 1)[0])
+                return EXIT_INCOMPLETE
+
+    parser = _parser()
+    args = parser.parse_args(arguments)
+    if args.command == "scan":
+        return _run_scan(args)
+    if args.command == "verify":
+        return _run_verify()
+    if args.command == "status":
+        _status()
+        return EXIT_CLEAN
+    parser.error("unsupported command")
+    return EXIT_INVALID
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

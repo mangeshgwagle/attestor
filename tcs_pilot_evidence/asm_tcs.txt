@@ -1,0 +1,14 @@
+FILE asm_challenge_500.asm  lines=501  findings=9  asm-rules=['asm-direct-execve', 'asm-legacy-int80', 'asm-nop-sled', 'asm-stack-pivot', 'asm-writable-executable-section']
+FILE cpp_challenge_200.cpp  lines=232  findings=32  asm-rules=[]
+FILE asm_10000_multi.asm  lines=10001  findings=0  asm-rules=[]
+{
+  "clean_10k_asm_findings": 0,
+  "weak_fixture_asm_rules": [
+    "asm-direct-execve",
+    "asm-legacy-int80",
+    "asm-nop-sled",
+    "asm-stack-pivot",
+    "asm-writable-executable-section"
+  ],
+  "weak_fixture_cpp_findings": 32
+}

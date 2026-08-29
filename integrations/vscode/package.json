@@ -1,0 +1,81 @@
+{
+  "name": "attestor-security",
+  "displayName": "Attestor 4.1.3 Evidence + Security",
+  "description": "Incremental diagnostics, evidence hover, workspace scans, and consent-gated verified previews.",
+  "version": "4.1.3",
+  "publisher": "attestor-local",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": ["Linters", "Programming Languages", "Other"],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onCommand:attestor.start",
+    "onCommand:attestor.previewImprovement",
+    "onCommand:attestor.scanWorkspace",
+    "onCommand:attestor.restart",
+    "onLanguage:python",
+    "onLanguage:javascript",
+    "onLanguage:javascriptreact",
+    "onLanguage:typescript",
+    "onLanguage:typescriptreact",
+    "onLanguage:c",
+    "onLanguage:cpp",
+    "onLanguage:haskell",
+    "onLanguage:rust",
+    "onLanguage:go",
+    "onLanguage:java",
+    "onLanguage:csharp",
+    "onLanguage:php",
+    "onLanguage:ruby",
+    "onLanguage:shellscript"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "attestor.start",
+        "title": "Attestor: Start Live Engineering + Security Analysis"
+      },
+      {
+        "command": "attestor.previewImprovement",
+        "title": "Attestor: Preview Verified Improvement"
+      },
+      {
+        "command": "attestor.scanWorkspace",
+        "title": "Attestor: Scan All Workspace Folders"
+      },
+      {
+        "command": "attestor.restart",
+        "title": "Attestor: Restart Language Server"
+      }
+    ],
+    "configuration": {
+      "title": "Attestor 4.1.3",
+      "properties": {
+        "attestor.pythonPath": {
+          "type": "string",
+          "default": "python",
+          "description": "Python 3.11+ executable used to start Attestor's bundled local language server."
+        },
+        "attestor.enableOnStartup": {
+          "type": "boolean",
+          "default": true,
+          "description": "Start Attestor automatically for supported files in trusted workspaces."
+        }
+      }
+    }
+  },
+  "files": [
+    "extension.js",
+    "README.md",
+    "package.json",
+    "server"
+  ],
+  "scripts": {
+    "stage-server": "node ./scripts/stage-server.js",
+    "vscode:prepublish": "npm run stage-server",
+    "check": "node --check extension.js && node --check scripts/stage-server.js"
+  }
+}

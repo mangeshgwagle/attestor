@@ -1,0 +1,6 @@
+# Dependencies for the full local verification pass.
+#
+# The core detector and CLI import nothing outside the standard library. This
+# file lists only what the optional gates need: numpy for the offline gate
+# trainer.
+-r requirements-train.txt

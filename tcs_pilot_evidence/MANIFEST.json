@@ -1,0 +1,37 @@
+{
+  "attestor": {
+    "analyzed_files": [
+      "detect.py",
+      "case_file42.py",
+      "trusted_access.py"
+    ],
+    "distribution": "4.2",
+    "identity": "Attestor",
+    "sha256": "beabfb2be733a3cf9297cf9f3cc6a8601d5ee4f12ade0c38c12247f827f9d4eb",
+    "version": "4.1.4"
+  },
+  "bundle": "tcs-pilot-evidence",
+  "claims": {
+    "case_chain_intact": true,
+    "case_proven": true,
+    "clean_10k_asm_findings": 0,
+    "honesty_gate_blocked_unproven": true,
+    "weak_asm_fixture_rules": [
+      "asm-direct-execve",
+      "asm-legacy-int80",
+      "asm-nop-sled",
+      "asm-stack-pivot",
+      "asm-writable-executable-section"
+    ],
+    "weak_cpp_fixture_findings": 32
+  },
+  "files": [
+    "case_tcs.txt",
+    "case_tcs.json",
+    "asm_tcs.txt",
+    "asm_tcs.json",
+    "README.md"
+  ],
+  "generated_by": "bundle_tcs_evidence.py",
+  "mode": "offline static analysis, no execution, no network, synthetic/owned fixtures only"
+}

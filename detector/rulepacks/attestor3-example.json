@@ -1,0 +1,42 @@
+{
+  "schema": "attestor-rule-pack/3.0",
+  "name": "Attestor 3.0 example rule pack",
+  "rules": [
+    {
+      "id": "attestor3-example-python-debug",
+      "version": "1.0.0",
+      "title": "Debug mode enabled",
+      "language": "python",
+      "extensions": [".py"],
+      "severity": "HIGH",
+      "confidence": 0.96,
+      "category": "security-configuration",
+      "cwe": "CWE-489",
+      "description": "Production debug mode can expose internal state and unsafe tooling.",
+      "remediation": "Disable debug mode outside an isolated development environment.",
+      "match_all": ["debug", "True"],
+      "match_any": [],
+      "exclude_any": ["# attestor: example-only"],
+      "case_sensitive": true,
+      "positive_fixtures": [
+        {
+          "path": "app.py",
+          "source": "app.run(debug=True)\n",
+          "expected_lines": [1]
+        }
+      ],
+      "negative_fixtures": [
+        {
+          "path": "app.py",
+          "source": "app.run(debug=False)\n",
+          "expected_lines": []
+        },
+        {
+          "path": "app.py",
+          "source": "app.run(debug=True)  # attestor: example-only\n",
+          "expected_lines": []
+        }
+      ]
+    }
+  ]
+}

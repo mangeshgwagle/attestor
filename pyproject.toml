@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "attestor"
+version = "4.2.0"
+description = "Multi-language static analysis engine with AI-assisted review"
+requires-python = ">=3.10"
+
+[project.scripts]
+attestor = "cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "detector"}
+py-modules = ["cli", "ai_engine"]

@@ -1,0 +1,26 @@
+attestor 4.2;
+requires console.write;
+
+scene Main {
+    let shifted: i64 = asr(-64, 2);
+    let ternary: i64 = crazy(0, 0);
+
+    Attestor says text("ASR=");
+    Attestor says number(shifted);
+    Attestor says text(" CRAZY=");
+    Attestor says number(ternary);
+
+    asm {
+        push 10;
+        putc;
+    }
+
+    a1z26 {
+        0-4-2 16-18-9-14-20
+    }
+
+    brainfuck {
+        ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        +.
+    }
+}

@@ -1,0 +1,9 @@
+README.md
+pyproject.toml
+detector/ai_engine.py
+detector/cli.py
+detector/attestor.egg-info/PKG-INFO
+detector/attestor.egg-info/SOURCES.txt
+detector/attestor.egg-info/dependency_links.txt
+detector/attestor.egg-info/entry_points.txt
+detector/attestor.egg-info/top_level.txt

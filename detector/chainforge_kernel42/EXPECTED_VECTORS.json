@@ -1,0 +1,13 @@
+{
+  "schema": "attestor-chainforge-kernel-4.2",
+  "note": "Shared constants for the ChainForge fixed-point kernels. The Python reference in detector/chainforge42.py, the reviewed x86-64 listing, and the C++ self-check all bind to these exact values.",
+  "dot_weights_q16": [22938, 16384, 13107, 6554, 6554],
+  "dot_features_sample": [1000000, 500000, 800000, 250000, 400000],
+  "dot_expected_shifted": 699932,
+  "alpha_q16": 55706,
+  "one_minus_alpha_q16": 9830,
+  "equations": {
+    "score": "score(c) = sum_i w[i]*f[i](c), Q16 fixed point, result >> 16",
+    "centrality_step": "x'[j] = ALPHA*sum_i x[i]*M[j][i] + (1-ALPHA)*s[j]"
+  }
+}

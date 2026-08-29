@@ -1,0 +1,5 @@
+Metadata-Version: 2.4
+Name: attestor
+Version: 4.2.0
+Summary: Multi-language static analysis engine with AI-assisted review
+Requires-Python: >=3.10

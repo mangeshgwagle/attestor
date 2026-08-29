@@ -1,0 +1,83 @@
+{
+  "schema": "attestor-vscode-server-bundle/1.0",
+  "version": "4.1.3",
+  "entrypoint": "attestor_lsp41.py",
+  "analysis_engine": "deterministic-live-core/4.1",
+  "files": [
+    {
+      "path": "advanced_rules.py",
+      "sha256": "513a0fc0f7b6236d7479bc8767029fecc8dc463dfe999f057900d5452e419c58",
+      "size": 63957
+    },
+    {
+      "path": "deepscan.py",
+      "sha256": "ece2bf74370ef8d7dc1ec6c4652859f1a5389da5cb0417ef861e7257b00048a0",
+      "size": 59313
+    },
+    {
+      "path": "detect.py",
+      "sha256": "27ea912e3441731d81ad6a709469b6c1543f7e6d558639075db5beb69515f70a",
+      "size": 354343
+    },
+    {
+      "path": "multilang.py",
+      "sha256": "2bea6c0b7e2feeab3e0c8561bb814eac3f2598c95f753f65dc738d7c763c4c7a",
+      "size": 8223
+    },
+    {
+      "path": "nativepool.py",
+      "sha256": "e2d180b89a3015e4e34f6a4e35f9bb908a06bfc360e601adb4a8cc7abc4dd5b5",
+      "size": 1223
+    },
+    {
+      "path": "nativescan.py",
+      "sha256": "461157a0f8cab3b75e9475c28b967258ebd45e808685c4ffc1c01051d14d0479",
+      "size": 23929
+    },
+    {
+      "path": "attestor_lsp.py",
+      "sha256": "943e8b8dcdabee6d5cff7238dfc66bd4e784a159d99396fd55bf167e70a4cd63",
+      "size": 16583
+    },
+    {
+      "path": "attestor_lsp41.py",
+      "sha256": "0f29abba535467f996ad42e250fa331acf6faca11cd2b41ff402e436c7c59fc3",
+      "size": 37500
+    },
+    {
+      "path": "patchguard.py",
+      "sha256": "2a3c73bd56f4aa670e38b60ac42024a537d74a30c64dd290d34de80b37ca0994",
+      "size": 40996
+    },
+    {
+      "path": "polyglot.py",
+      "sha256": "6c8470227c797c5da1b25b384c58badf4131045114523234a5466d81809e51a8",
+      "size": 17012
+    },
+    {
+      "path": "precision_catalog.py",
+      "sha256": "d973b07cad231f3ad9ff63004519961ba6dccb17b94523d9aa3b85a4de9f8f62",
+      "size": 71715
+    },
+    {
+      "path": "rarebugs.py",
+      "sha256": "05cabb23559b20dda2ceef699dccdea46f693c616c8558b5d56f3ce8afed8266",
+      "size": 16556
+    },
+    {
+      "path": "runtime_lab.py",
+      "sha256": "6fc74df831cb005e096957890300c447d2eff5863a9572d6f178d0b8fef355b9",
+      "size": 25528
+    },
+    {
+      "path": "scanengine.py",
+      "sha256": "05131115c9cbfac2da1ced762f6c48efc412a4a68cdf900dfb6a5c51a162b2a0",
+      "size": 29148
+    },
+    {
+      "path": "verified_remediation.py",
+      "sha256": "0fe1f266334890fea4918a4369ef6068a7a433bbc85d719e1f519aa7691c2539",
+      "size": 53386
+    }
+  ]
+}

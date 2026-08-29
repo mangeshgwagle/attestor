@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Attestor unified CLI -- one command to rule them all.
 
+    attestor check .                # THE command: scan + triage + what matters
+    attestor check . --effort max   # deepest analysis (all scanners)
+    attestor fix src/ --apply       # auto-fix safe findings (verified by re-scan)
+    attestor fix src/ --pr          # auto-fix + open a pull request
     attestor scan src/              # grade Python files A-F
     attestor native src/            # grade C/C++/Assembly
     attestor review old.py new.py   # diff review (Python)
@@ -48,7 +52,7 @@ _DETECTOR = Path(__file__).resolve().parent
 if os.fspath(_DETECTOR) not in sys.path:
     sys.path.insert(0, os.fspath(_DETECTOR))
 
-VERSION = "4.2"
+VERSION = "4.3"
 BANNER = r"""
    _   _   _            _
   / \ | |_| |_ ___  ___| |_ ___  _ __
@@ -61,6 +65,172 @@ BANNER = r"""
 def _banner():
     sys.stderr.write(BANNER.lstrip("\n"))
     sys.stderr.flush()
+
+
+class C:
+    """Minimal ANSI colorizer. Off when piped, when NO_COLOR is set, or --no-color."""
+    enabled = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
+
+    _CODES = {"red": 91, "green": 92, "yellow": 93, "blue": 94, "magenta": 95,
+              "cyan": 96, "grey": 90, "bold": 1, "dim": 2}
+
+    @classmethod
+    def paint(cls, s, *styles):
+        if not cls.enabled:
+            return s
+        codes = ";".join(str(cls._CODES[s2]) for s2 in styles if s2 in cls._CODES)
+        return f"\033[{codes}m{s}\033[0m" if codes else s
+
+
+_SEV_COLOR = {"CRITICAL": "red", "HIGH": "red", "MEDIUM": "yellow", "LOW": "cyan"}
+
+
+def _sev(severity: str) -> str:
+    return C.paint(f"{severity:8s}", _SEV_COLOR.get(severity, "grey"), "bold")
+
+
+# Effort ladder: which scanners run. Higher effort = deeper + slower.
+EFFORT_LEVELS = ("low", "medium", "high", "max")
+EFFORT_SCANNERS = {
+    "low":    ["core"],
+    "medium": ["core", "secrets", "exploits", "iac", "js"],
+    "high":   ["core", "secrets", "exploits", "iac", "js", "taint", "supply", "cicd", "git"],
+    "max":    ["core", "secrets", "exploits", "iac", "js", "taint", "supply", "cicd",
+               "git", "similarity", "binary"],
+}
+
+
+def _run_effort(root: str, effort: str) -> list[dict]:
+    """Run the scanner set for the given effort level and return unified findings."""
+    wanted = set(EFFORT_SCANNERS.get(effort, EFFORT_SCANNERS["medium"]))
+    findings: list[dict] = []
+
+    def _add(objs, cat=None, cwe_attr=None):
+        for f in objs:
+            findings.append({
+                "path": getattr(f, "path", getattr(f, "file", "")),
+                "line": getattr(f, "line", getattr(f, "line_start", 0)),
+                "rule_id": getattr(f, "rule_id", getattr(f, "rule", "")),
+                "severity": getattr(f, "severity", "MEDIUM"),
+                "description": getattr(f, "description", getattr(f, "message", "")),
+                "category": cat or getattr(f, "category", ""),
+                "cwe": getattr(f, cwe_attr, "") if cwe_attr else getattr(f, "cwe", ""),
+            })
+
+    if "core" in wanted:
+        try:
+            import detect
+            for p in detect.collect_paths([root]):
+                for f in detect.scan_file(p):
+                    findings.append({
+                        "path": getattr(f, "path", p), "line": getattr(f, "line", 0),
+                        "rule_id": getattr(f, "rule", ""),
+                        "severity": getattr(f, "severity", "MEDIUM"),
+                        "description": getattr(f, "message", ""), "category": "core",
+                    })
+        except Exception:
+            pass
+    scanner_map = {
+        "secrets": ("secret_scanner", "secrets"), "exploits": ("exploit_detector", None),
+        "iac": ("iac_scanner", None), "js": ("js_scanner", None),
+        "supply": ("supply_chain", None), "cicd": ("cicd_scanner", None),
+        "binary": ("binary_analyzer", None),
+    }
+    for key, (modname, cat) in scanner_map.items():
+        if key in wanted:
+            try:
+                mod = __import__(modname)
+                fn = getattr(mod, "scan_directory", None) or getattr(mod, "scan", None)
+                _add(fn(root), cat)
+            except Exception:
+                pass
+    if "taint" in wanted:
+        try:
+            import taint_tracker
+            for fl in taint_tracker.scan_directory(root):
+                findings.append({"path": fl.sink_file, "line": fl.sink_line,
+                                 "rule_id": f"TAINT-{fl.sink_type}", "severity": "HIGH",
+                                 "description": f"{fl.source_type} -> {fl.sink_type}",
+                                 "category": "taint", "cwe": fl.sink_cwe})
+        except Exception:
+            pass
+    if "git" in wanted:
+        try:
+            import git_history
+            _add(git_history.scan(root), None)
+        except Exception:
+            pass
+    if "similarity" in wanted:
+        try:
+            import semantic_similarity
+            for m in semantic_similarity.scan_directory(root):
+                findings.append({"path": m.path, "line": m.line_start,
+                                 "rule_id": m.cve_id, "severity": m.cve_severity,
+                                 "description": m.cve_description, "category": "similarity",
+                                 "cwe": m.cve_cwe})
+        except Exception:
+            pass
+    return findings
+
+
+def cmd_check(args):
+    """The one-command experience: scan -> triage -> show what matters -> offer fix."""
+    import triage
+    import autofix
+    if args.no_color:
+        C.enabled = False
+    _banner()
+    root = args.root
+    effort = args.effort
+    print(f"\n  {C.paint('attestor check', 'bold', 'cyan')}  "
+          f"{root}   effort={C.paint(effort, 'bold')}\n")
+
+    triage.load_overrides()
+    findings = _run_effort(root, effort)
+    triaged = triage.triage_all(findings)
+    counts = triage.counts(triaged)
+
+    actionable = [t for t in triaged if t.action != "suppress"]
+    autofixable = sum(1 for t in actionable
+                      if t.finding.get("rule_id", "") in autofix.SAFE_FIXERS)
+
+    sev_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+    for t in actionable:
+        s = t.finding.get("severity", "MEDIUM")
+        sev_counts[s] = sev_counts.get(s, 0) + 1
+
+    total_raw = len(findings)
+    suppressed = counts["suppress"]
+    print(f"  scanned with {len(EFFORT_SCANNERS[effort])} scanner group(s)")
+    print(f"  {C.paint(str(total_raw), 'bold')} raw findings  ->  "
+          f"{C.paint(str(len(actionable)), 'bold', 'green')} actionable  "
+          f"({C.paint(str(suppressed), 'dim')} noise suppressed)")
+    print(f"  {_sev('CRITICAL')}{C.paint(str(sev_counts['CRITICAL']),'red','bold')}   "
+          f"{_sev('HIGH')}{sev_counts['HIGH']}   "
+          f"{_sev('MEDIUM')}{sev_counts['MEDIUM']}   "
+          f"{_sev('LOW')}{sev_counts['LOW']}")
+
+    print(f"\n  {C.paint('Top findings:', 'bold')}")
+    for t in actionable[:args.top]:
+        f = t.finding
+        p = f.get("path", "?")
+        ln = f.get("line", "?")
+        fixable = C.paint(" [autofixable]", "green") if f.get("rule_id") in autofix.SAFE_FIXERS else ""
+        print(f"    {_sev(f.get('severity','?'))} {f.get('rule_id','?'):24s} "
+              f"{p}:{ln}{fixable}")
+        desc = (f.get("description") or "").strip().replace("\n", " ")
+        if desc:
+            print(f"      {C.paint(desc[:90], 'dim')}")
+    if len(actionable) > args.top:
+        print(f"    {C.paint(f'... and {len(actionable)-args.top} more', 'dim')}")
+
+    if autofixable:
+        print(f"\n  {C.paint('->', 'green', 'bold')} "
+              f"{autofixable} finding(s) can be auto-fixed: "
+              f"{C.paint(f'attestor fix {root} --apply', 'bold', 'cyan')}")
+    if args.json:
+        print(json.dumps(triage.to_dict(triaged), indent=2))
+    return min(sev_counts["CRITICAL"], 250)
 
 
 def cmd_scan(args):
@@ -442,6 +612,46 @@ def cmd_taint(args):
     return min(len(flows), 250) if flows else 0
 
 
+def cmd_dataflow(args):
+    import dataflow
+    _banner()
+    print(f"\n  Dataflow Engine -- interprocedural taint with evidence traces\n")
+    findings = dataflow.scan_paths(args.paths)
+    if args.json:
+        print(json.dumps(dataflow.to_dict(findings), indent=2))
+    else:
+        print(dataflow.render(findings))
+    return min(sum(1 for f in findings if f.severity == "CRITICAL"), 250) if findings else 0
+
+
+def cmd_confirm(args):
+    import confirm
+    _banner()
+    print(f"\n  Dynamic Confirmation -- proving flows fire (without detonation)\n")
+    results = confirm.confirm_paths(args.paths, timeout=args.timeout)
+    if args.json:
+        print(json.dumps(confirm.to_dict(results), indent=2))
+    else:
+        print(confirm.render(results))
+    return min(sum(1 for r in results if r.status == "CONFIRMED"), 250)
+
+
+def cmd_audit(args):
+    import dataflow, adjudicate
+    _banner()
+    print(f"\n  Attestor Audit -- dataflow + Owen Coder adjudication (hybrid)\n")
+    findings = dataflow.scan_paths(args.paths)
+    if not findings:
+        print("  No taint flows found.")
+        return 0
+    adjs = adjudicate.adjudicate(findings, model=getattr(args, "model", None))
+    if args.json:
+        print(json.dumps(adjudicate.to_dict(adjs), indent=2))
+    else:
+        print(adjudicate.render(adjs))
+    return min(sum(1 for a in adjs if a.verdict == "EXPLOITABLE"), 250)
+
+
 def cmd_binary(args):
     import binary_analyzer
     _banner()
@@ -601,6 +811,18 @@ def cmd_correlate(args):
     return 0
 
 
+def cmd_bench(args):
+    import bench_compare
+    _banner()
+    print(f"\n  Benchmark -- dataflow engine vs baselines\n")
+    scores = bench_compare.run()
+    if args.json:
+        print(json.dumps(bench_compare.to_dict(scores), indent=2))
+    else:
+        print(bench_compare.render(scores))
+    return 0
+
+
 def cmd_evaluate(args):
     import evaluate
     _banner()
@@ -646,6 +868,44 @@ def cmd_flywheel(args):
     print(f"\n  Flywheel -- harvesting training pairs from {root}\n")
     stats = flywheel.harvest(root, out, auto=args.auto, model=args.model)
     print(json.dumps(stats, indent=2))
+    return 0
+
+
+def cmd_fix(args):
+    import autofix
+    _banner()
+    apply = args.apply or args.pr or args.test    # --pr/--test imply --apply
+    mode = "applying" if apply else "previewing"
+    print(f"\n  Autofix -- {mode} safe fixes in {', '.join(args.paths)}\n")
+
+    test_report = None
+    if args.test:
+        results, test_report = autofix.apply_with_test_gate(
+            args.paths, aggressive=args.aggressive, test_cmd=args.test_cmd)
+    else:
+        results = autofix.fix_paths(args.paths, apply=apply, aggressive=args.aggressive)
+
+    if args.json:
+        out = {"results": autofix.to_dict(results)}
+        if test_report:
+            out["tests"] = {"ran": test_report.ran, "passed": test_report.passed,
+                            "summary": test_report.summary}
+        if args.pr:
+            out["pr"] = autofix.create_pr(results, base=args.base)
+        print(json.dumps(out, indent=2))
+    else:
+        print(autofix.render(results, apply=apply))
+        if test_report:
+            if not test_report.ran:
+                print(f"\n  Tests: not run ({test_report.summary})")
+            elif test_report.passed:
+                print(f"\n  Tests: {C.paint('PASSED', 'green', 'bold')} -- fixes are non-breaking.")
+            else:
+                print(f"\n  Tests: {C.paint('FAILED', 'red', 'bold')} -- all fixes reverted.")
+                print(f"    {test_report.summary}")
+        if args.pr:
+            info = autofix.create_pr(results, base=args.base)
+            print(autofix.render_pr(info))
     return 0
 
 
@@ -945,11 +1205,31 @@ def build_parser() -> argparse.ArgumentParser:
     p_surf.set_defaults(func=cmd_surface)
 
     # --- taint (interprocedural taint tracking) ---
-    p_taint = sub.add_parser("taint", help="interprocedural taint tracking",
-                             aliases=["dataflow"])
+    p_taint = sub.add_parser("taint", help="taint tracking (pattern-based, legacy)")
     p_taint.add_argument("paths", nargs="+", help="files or directories")
     p_taint.add_argument("--json", action="store_true")
     p_taint.set_defaults(func=cmd_taint)
+
+    # --- dataflow (interprocedural taint with evidence traces -- SOTA core) ---
+    p_df = sub.add_parser("dataflow", help="interprocedural taint with evidence traces",
+                          aliases=["flow"])
+    p_df.add_argument("paths", nargs="+", help="files or directories")
+    p_df.add_argument("--json", action="store_true")
+    p_df.set_defaults(func=cmd_dataflow)
+
+    # --- confirm (dynamic confirmation without detonation) ---
+    p_conf = sub.add_parser("confirm", help="dynamically prove flows fire (no detonation)")
+    p_conf.add_argument("paths", nargs="+", help="files or directories")
+    p_conf.add_argument("--timeout", type=int, default=15, help="per-file harness timeout (s)")
+    p_conf.add_argument("--json", action="store_true")
+    p_conf.set_defaults(func=cmd_confirm)
+
+    # --- audit (flagship hybrid: dataflow + Owen Coder adjudication) ---
+    p_audit = sub.add_parser("audit", help="HYBRID: dataflow + Owen Coder adjudication")
+    p_audit.add_argument("paths", nargs="+", help="files or directories")
+    p_audit.add_argument("--model", help="override Owen Coder model")
+    p_audit.add_argument("--json", action="store_true")
+    p_audit.set_defaults(func=cmd_audit)
 
     # --- binary (bytecode/binary analysis) ---
     p_bin = sub.add_parser("binary", help="analyze .pyc/.class/.wasm binaries",
@@ -1000,7 +1280,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # --- compliance (framework mapping) ---
     p_comp = sub.add_parser("compliance", help="compliance framework reports",
-                            aliases=["audit"])
+                            aliases=["comply"])
     p_comp.add_argument("root", nargs="?", default=".")
     p_comp.add_argument("--framework", "-f",
                         choices=["owasp", "nist", "soc2", "pci-dss", "all"],
@@ -1032,6 +1312,39 @@ def build_parser() -> argparse.ArgumentParser:
     p_corr.add_argument("--logs", help="path to runtime logs")
     p_corr.add_argument("--traces", help="path to trace data (JSON)")
     p_corr.set_defaults(func=cmd_correlate)
+
+    # --- check (the unified, effort-aware, one-command experience) ---
+    p_chk = sub.add_parser("check", help="ONE command: scan + triage + what matters",
+                           aliases=["c"])
+    p_chk.add_argument("root", nargs="?", default=".")
+    p_chk.add_argument("--effort", "-e", choices=EFFORT_LEVELS, default="medium",
+                       help="analysis depth: low|medium|high|max (default: medium)")
+    p_chk.add_argument("--top", type=int, default=15, help="how many findings to show")
+    p_chk.add_argument("--no-color", action="store_true")
+    p_chk.add_argument("--json", action="store_true")
+    p_chk.set_defaults(func=cmd_check)
+
+    # --- fix (autofix with verify loop) ---
+    p_fix = sub.add_parser("fix", help="auto-fix safe findings (verified by re-scan)",
+                           aliases=["autofix"])
+    p_fix.add_argument("paths", nargs="+", help="files or directories")
+    p_fix.add_argument("--apply", action="store_true",
+                       help="write fixes (default: dry-run preview)")
+    p_fix.add_argument("--pr", action="store_true",
+                       help="apply verified fixes on a branch and open a PR")
+    p_fix.add_argument("--base", help="base branch for the PR (default: current)")
+    p_fix.add_argument("--aggressive", action="store_true",
+                       help="also propose semantic-changing fixes")
+    p_fix.add_argument("--test", action="store_true",
+                       help="run the test suite after fixing; revert all if it fails")
+    p_fix.add_argument("--test-cmd", help="custom test command (default: pytest)")
+    p_fix.add_argument("--json", action="store_true")
+    p_fix.set_defaults(func=cmd_fix)
+
+    # --- bench (dataflow engine vs baselines) ---
+    p_bench = sub.add_parser("bench", help="benchmark dataflow engine vs legacy/Bandit")
+    p_bench.add_argument("--json", action="store_true")
+    p_bench.set_defaults(func=cmd_bench)
 
     # --- evaluate (precision/recall/F1 + noise reduction) ---
     p_eval = sub.add_parser("evaluate", help="measure precision/recall/F1 + FP reduction",

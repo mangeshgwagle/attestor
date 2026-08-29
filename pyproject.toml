@@ -4,13 +4,23 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "attestor"
-version = "4.2.0"
-description = "Multi-language static analysis engine with AI-assisted review"
+version = "4.3.0"
+description = "Hybrid security auditor: interprocedural dataflow + grounded LLM adjudication + dynamic confirmation"
 requires-python = ">=3.10"
 
 [project.scripts]
-attestor = "cli:main"
+attestor = "attestor.cli:main"
 
 [tool.setuptools]
-package-dir = {"" = "detector"}
-py-modules = ["cli", "ai_engine"]
+# Install detector/ as the `attestor` package. cli.py inserts its own directory
+# onto sys.path at import, so the flat `import dataflow` style keeps working when
+# installed -- without polluting the top-level module namespace.
+package-dir = {"attestor" = "detector"}
+packages = ["attestor"]
+
+[tool.setuptools.package-data]
+attestor = ["*.py"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

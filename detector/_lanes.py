@@ -22,7 +22,7 @@ REDTEAM: frozenset[str] = frozenset({
     # offline credential auditing
     "password_audit",
     # metasploit bridge (if present)
-    "msf_bridge",
+    "msf_bridge", "sliver_bridge",
 })
 
 

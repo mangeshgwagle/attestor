@@ -99,14 +99,34 @@ def _static_verdict(f: dataflow.Finding) -> Adjudication:
         suggested_fix="", model="(static only -- Owen Coder offline)", grounded=False)
 
 
-def adjudicate(findings: list[dataflow.Finding], model: str | None = None,
-               limit: int = 100) -> list[Adjudication]:
+def _pick_backend(model: str | None):
+    """Choose the reasoning backend, best first:
+       1. embedded in-process GGUF (local_model)  -- 'raw inside', no server
+       2. Ollama (ai_engine)                       -- local daemon
+       3. none -> static fallback
+    Returns (name, generate_fn) or (None, None)."""
+    try:
+        import local_model
+        if local_model.is_available():
+            return ("embedded:" + __import__("os").path.basename(local_model.find_weights() or "gguf"),
+                    lambda prompt: local_model.generate(prompt, temperature=0.1))
+    except Exception:
+        pass
     try:
         import ai_engine
-        online = ai_engine.is_available() and bool(ai_engine.list_models())
+        if ai_engine.is_available() and ai_engine.list_models():
+            name = "ollama:" + (model or ai_engine.resolve_model("review"))
+            return (name, lambda prompt: ai_engine.generate(
+                prompt, model=model, task="review", stream=False, temperature=0.1))
     except Exception:
-        ai_engine = None
-        online = False
+        pass
+    return (None, None)
+
+
+def adjudicate(findings: list[dataflow.Finding], model: str | None = None,
+               limit: int = 100) -> list[Adjudication]:
+    backend_name, gen = _pick_backend(model)
+    online = gen is not None
 
     results = []
     for f in findings[:limit]:
@@ -114,18 +134,15 @@ def adjudicate(findings: list[dataflow.Finding], model: str | None = None,
             results.append(_static_verdict(f))
             continue
         try:
-            prompt = build_prompt(f)
-            text = ai_engine.generate(prompt, model=model, task="review",
-                                      stream=False, temperature=0.1)
+            text = gen(build_prompt(f))
             verdict, conf, why, fix = _parse(text or "")
-            used = model or ai_engine.resolve_model("review")
             results.append(Adjudication(
                 finding=f, verdict=verdict, confidence=conf,
                 explanation=why or "(no explanation returned)",
-                suggested_fix=fix, model=used, grounded=True))
+                suggested_fix=fix, model=backend_name, grounded=True))
         except Exception as exc:
             adj = _static_verdict(f)
-            adj.explanation += f"  [LLM error: {str(exc)[:60]}]"
+            adj.explanation += f"  [model error: {str(exc)[:60]}]"
             results.append(adj)
 
     # rank: exploitable + high confidence first

@@ -652,6 +652,18 @@ def cmd_audit(args):
     return min(sum(1 for a in adjs if a.verdict == "EXPLOITABLE"), 250)
 
 
+def cmd_reachability(args):
+    import reachability
+    _banner()
+    print(f"\n  Reachability -- which findings can an attacker actually trigger?\n")
+    ann = reachability.scan(args.paths)
+    if args.json:
+        print(json.dumps(reachability.to_dict(ann), indent=2))
+    else:
+        print(reachability.render(ann))
+    return min(sum(1 for _f, r in ann if r.reachable), 250)
+
+
 def cmd_binary(args):
     import binary_analyzer
     _banner()
@@ -857,6 +869,33 @@ def cmd_triage(args):
         print(json.dumps(triage.to_dict(triaged), indent=2))
     else:
         print(triage.render(triaged))
+    return 0
+
+
+def cmd_exploit(args):
+    """Scan root, map findings to Metasploit modules, emit an .rc script."""
+    import metasploit_bridge
+    _banner()
+    root = args.root
+    print(f"\n  Exploit -- scanning {root} and building Metasploit resource script\n")
+    raw = _collect_all_findings(root)
+    # Normalize: bridge expects a cwe LIST; scanners emit a bare string or none
+    findings = []
+    for f in raw:
+        cwe = f.get("cwe") or ""
+        findings.append({**f, "cwe": [cwe] if isinstance(cwe, str) and cwe
+                                     else list(cwe) if cwe else []})
+    metasploit_bridge.write_rc(findings, args.out,
+                               rhosts=args.rhosts, lhost=args.lhost,
+                               lport=args.lport, payload_override=args.payload)
+    if args.run:
+        import subprocess as _sp
+        msf = os.environ.get("ATT_MSFCONSOLE",
+                             r"C:\metasploit-framework\bin\msfconsole.bat")
+        print(f"\n  Launching: {msf} -r {args.out}")
+        subprocess_rc = _sp.call([msf, "-r", os.path.abspath(args.out)])
+        return subprocess_rc
+    print(f"  Run it:  msfconsole -r {args.out}")
     return 0
 
 
@@ -1217,6 +1256,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_df.add_argument("--json", action="store_true")
     p_df.set_defaults(func=cmd_dataflow)
 
+    # --- reachability (whole-program: which findings are triggerable) ---
+    p_reach = sub.add_parser("reachability", help="whole-program reachability of findings",
+                             aliases=["reach"])
+    p_reach.add_argument("paths", nargs="+", help="files or directories")
+    p_reach.add_argument("--json", action="store_true")
+    p_reach.set_defaults(func=cmd_reachability)
+
     # --- confirm (dynamic confirmation without detonation) ---
     p_conf = sub.add_parser("confirm", help="dynamically prove flows fire (no detonation)")
     p_conf.add_argument("paths", nargs="+", help="files or directories")
@@ -1361,6 +1407,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_tri.add_argument("root", nargs="?", default=".")
     p_tri.add_argument("--json", action="store_true")
     p_tri.set_defaults(func=cmd_triage)
+
+    # --- msf (findings -> Metasploit resource script) ---
+    p_xpl = sub.add_parser("msf",
+                           help="export findings as a Metasploit .rc resource script")
+    p_xpl.add_argument("root", nargs="?", default=".")
+    p_xpl.add_argument("--rhosts", required=True,
+                       help="target IP/range (comma-separated or CIDR)")
+    p_xpl.add_argument("--lhost", help="local IP for reverse shells")
+    p_xpl.add_argument("--lport", type=int, default=4444)
+    p_xpl.add_argument("--payload",
+                       help="override payload for all exploit modules "
+                            "(default: platform-matched)")
+    p_xpl.add_argument("--out", "-o", default="attestor_findings.rc",
+                       help="output .rc file (default: attestor_findings.rc)")
+    p_xpl.add_argument("--run", action="store_true",
+                       help="launch msfconsole -r on the generated .rc")
+    p_xpl.set_defaults(func=cmd_exploit)
 
     # --- flywheel (findings -> Owen Coder training data) ---
     p_fly = sub.add_parser("flywheel", help="turn findings into Owen Coder training pairs")

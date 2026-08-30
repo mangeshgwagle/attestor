@@ -139,6 +139,11 @@ def generate_rc(plan: Plan) -> str:
         f"setg LHOST {plan.lhost}",
         f"setg LPORT {plan.lport}",
         "",
+        "# --- recon first (needs nmap installed + msfdb) ---",
+        "# db_nmap -sV -sC " + (plan.target or "TARGET_HOST"),
+        "#   -> populates hosts/services so the modules below have real data.",
+        "#   run 'hosts' and 'services' after to see what nmap found.",
+        "",
     ]
     if not plan.matched:
         L.append("# (no findings mapped to a Metasploit module)")

@@ -1009,10 +1009,29 @@ def cmd_killchain(args):
         except Exception:
             pass
         chains = killchain.synthesize(all_findings)
-    if args.json:
+    if args.graph:
+        import attack_graph_viz
+        out = args.output or "attack-graph.html"
+        attack_graph_viz.write_html(killchain.to_dict(chains), out)
+        print(f"  attack graph written to: {os.path.abspath(out)}")
+    elif args.json:
         print(json.dumps(killchain.to_dict(chains), indent=2))
     else:
         print(killchain.render(chains))
+    return 0
+
+
+def cmd_attack_graph(args):
+    import killchain
+    import attack_graph_viz
+    _banner()
+    print(f"\n  Attack Graph -- visualizing {', '.join(args.paths)}\n")
+    chains = killchain.synthesize_from_engines(args.paths)
+    dicts = killchain.to_dict(chains)
+    out = args.output or "attack-graph.html"
+    attack_graph_viz.write_html(dicts, out)
+    print(f"  {len(chains)} chain(s) rendered to: {os.path.abspath(out)}")
+    print(f"  open it in a browser to explore the interactive graph.")
     return 0
 
 
@@ -1519,8 +1538,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_kc.add_argument("paths", nargs="+", help="files or directories")
     p_kc.add_argument("--full", action="store_true",
                       help="run ALL engines (detect, interproc, api, iac, threat-model)")
+    p_kc.add_argument("--graph", action="store_true",
+                      help="output interactive HTML attack graph")
+    p_kc.add_argument("--output", "-o",
+                      help="output file for --graph (default: attack-graph.html)")
     p_kc.add_argument("--json", action="store_true")
     p_kc.set_defaults(func=cmd_killchain)
+
+    # --- attack-graph (standalone interactive visualization) ---
+    p_ag = sub.add_parser("attack-graph",
+                          help="interactive HTML attack graph from all engines",
+                          aliases=["graph", "viz"])
+    p_ag.add_argument("paths", nargs="+", help="files or directories")
+    p_ag.add_argument("--output", "-o", default="attack-graph.html",
+                      help="output HTML file (default: attack-graph.html)")
+    p_ag.set_defaults(func=cmd_attack_graph)
 
     # --- bench (dataflow engine vs baselines) ---
     p_bench = sub.add_parser("bench", help="benchmark dataflow engine vs legacy/Bandit")

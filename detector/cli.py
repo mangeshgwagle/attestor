@@ -983,6 +983,39 @@ def cmd_interproc(args):
     return 0
 
 
+def cmd_killchain(args):
+    import killchain
+    _banner()
+    print(f"\n  Kill Chain Synthesis -- analyzing {', '.join(args.paths)}\n")
+    if args.full:
+        chains = killchain.synthesize_from_engines(args.paths)
+    else:
+        import interprocedural
+        import detect
+        all_findings = []
+        for p in args.paths:
+            if os.path.isfile(p):
+                for f in detect.scan_file(p):
+                    d = {}
+                    for attr in ("rule", "line", "severity", "file", "sink_type",
+                                 "sink_line", "cwe", "category"):
+                        val = getattr(f, attr, None)
+                        if val is not None:
+                            d[attr] = val
+                    all_findings.append(d)
+        try:
+            inter = interprocedural.scan_paths(args.paths)
+            all_findings.extend(interprocedural.to_dict(inter))
+        except Exception:
+            pass
+        chains = killchain.synthesize(all_findings)
+    if args.json:
+        print(json.dumps(killchain.to_dict(chains), indent=2))
+    else:
+        print(killchain.render(chains))
+    return 0
+
+
 def cmd_plan_fix(args):
     import fixengine
     _banner()
@@ -1478,6 +1511,16 @@ def build_parser() -> argparse.ArgumentParser:
                          help="max call chain depth (default: 8)")
     p_inter.add_argument("--json", action="store_true")
     p_inter.set_defaults(func=cmd_interproc)
+
+    # --- killchain (attack chain synthesis) ---
+    p_kc = sub.add_parser("killchain",
+                          help="synthesize multi-step attack chains from findings",
+                          aliases=["kc", "attack"])
+    p_kc.add_argument("paths", nargs="+", help="files or directories")
+    p_kc.add_argument("--full", action="store_true",
+                      help="run ALL engines (detect, interproc, api, iac, threat-model)")
+    p_kc.add_argument("--json", action="store_true")
+    p_kc.set_defaults(func=cmd_killchain)
 
     # --- bench (dataflow engine vs baselines) ---
     p_bench = sub.add_parser("bench", help="benchmark dataflow engine vs legacy/Bandit")

@@ -23,6 +23,8 @@ REDTEAM: frozenset[str] = frozenset({
     "password_audit",
     # metasploit bridge (if present)
     "msf_bridge", "sliver_bridge",
+    # engagement planner
+    "engagement",
 })
 
 

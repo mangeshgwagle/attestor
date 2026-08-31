@@ -37,6 +37,13 @@
     attestor ai fix app.py          # AI suggests fixes
     attestor ai review app.py       # AI deep review
     attestor ai ask "question"      # ask Owen Coder anything
+    attestor sym-solve .             # symbolic path feasibility
+    attestor abstract .              # abstract interpretation (value ranges)
+    attestor clones .                # semantic clone detection
+    attestor taint-dsl . --policy p  # custom taint policy (YAML)
+    attestor api-scan spec.json      # OpenAPI/Swagger security scan
+    attestor threat-model .          # auto-STRIDE threat model
+    attestor sbom . --format spdx    # SBOM generation (CycloneDX/SPDX)
     attestor control policy          # show Owner Control policy
     attestor version                 # version info
 """
@@ -899,6 +906,95 @@ def cmd_exploit(args):
     return 0
 
 
+def cmd_sym_solve(args):
+    import sym_solve
+    import dataflow
+    _banner()
+    print(f"\n  Symbolic Path Feasibility -- analyzing {', '.join(args.paths)}\n")
+    flows = dataflow.to_dict(dataflow.scan_paths(args.paths))
+    results = sym_solve.analyze_findings(flows, args.paths)
+    if args.json:
+        print(json.dumps(sym_solve.to_dict(results), indent=2))
+    else:
+        print(sym_solve.render(results))
+    return 0
+
+
+def cmd_abstract_interp(args):
+    import abstract_interp
+    _banner()
+    print(f"\n  Abstract Interpretation -- analyzing {', '.join(args.paths)}\n")
+    findings = abstract_interp.scan_paths(args.paths)
+    if args.json:
+        print(json.dumps(abstract_interp.to_dict(findings), indent=2))
+    else:
+        print(abstract_interp.render(findings))
+    return 0
+
+
+def cmd_clone_detect(args):
+    import clone_detect
+    _banner()
+    print(f"\n  Semantic Clone Detection -- scanning {', '.join(args.paths)}\n")
+    clones, nears = clone_detect.scan_paths(args.paths, near_threshold=args.threshold)
+    if args.json:
+        print(json.dumps(clone_detect.to_dict(clones, nears), indent=2))
+    else:
+        print(clone_detect.render(clones, nears))
+    return 0
+
+
+def cmd_taint_dsl(args):
+    import taint_dsl
+    _banner()
+    policy = taint_dsl.load_policy_file(args.policy)
+    print(f"\n  Taint Policy DSL -- policy '{policy.name}' on {', '.join(args.paths)}\n")
+    findings = taint_dsl.scan_with_policy(args.paths, policy)
+    if args.json:
+        print(json.dumps(taint_dsl.to_dict(findings), indent=2))
+    else:
+        print(taint_dsl.render(findings))
+    return 0
+
+
+def cmd_api_scan(args):
+    import api_scan
+    _banner()
+    print(f"\n  API Security Scan -- analyzing {', '.join(args.paths)}\n")
+    findings = api_scan.scan_paths(args.paths)
+    if args.json:
+        print(json.dumps(api_scan.to_dict(findings), indent=2))
+    else:
+        print(api_scan.render(findings))
+    return 0
+
+
+def cmd_threat_model(args):
+    import threat_model
+    _banner()
+    print(f"\n  Threat Model Generator -- analyzing {', '.join(args.paths)}\n")
+    comps, bounds, threats = threat_model.scan_paths(args.paths)
+    if args.json:
+        print(json.dumps(threat_model.to_dict(threats), indent=2))
+    else:
+        print(threat_model.render(comps, bounds, threats))
+    return 0
+
+
+def cmd_sbom(args):
+    import sbom_gen
+    _banner()
+    print(f"\n  SBOM Generator -- collecting from {', '.join(args.paths)}\n")
+    deps = sbom_gen.collect_deps(args.paths)
+    if args.format == "cyclonedx":
+        print(json.dumps(sbom_gen.to_cyclonedx(deps, args.project), indent=2))
+    elif args.format == "spdx":
+        print(json.dumps(sbom_gen.to_spdx(deps, args.project), indent=2))
+    else:
+        print(sbom_gen.render(deps))
+    return 0
+
+
 def cmd_flywheel(args):
     import flywheel
     _banner()
@@ -1538,6 +1634,53 @@ def build_parser() -> argparse.ArgumentParser:
     p_ctrl_run.add_argument("--confirm-plan-sha256", default="")
     p_ctrl_run.add_argument("--format", choices=("text", "json"), default="json")
     p_ctrl_run.set_defaults(func=cmd_control)
+
+    # --- symbolic path feasibility ---
+    p_sym = sub.add_parser("sym-solve", help="symbolic path feasibility analysis")
+    p_sym.add_argument("paths", nargs="+")
+    p_sym.add_argument("--json", action="store_true")
+    p_sym.set_defaults(func=cmd_sym_solve)
+
+    # --- abstract interpretation ---
+    p_ai2 = sub.add_parser("abstract", help="abstract interpretation (value ranges)")
+    p_ai2.add_argument("paths", nargs="+")
+    p_ai2.add_argument("--json", action="store_true")
+    p_ai2.set_defaults(func=cmd_abstract_interp)
+
+    # --- semantic clone detection ---
+    p_clone = sub.add_parser("clones", help="semantic clone detection")
+    p_clone.add_argument("paths", nargs="+")
+    p_clone.add_argument("--threshold", type=float, default=0.75)
+    p_clone.add_argument("--json", action="store_true")
+    p_clone.set_defaults(func=cmd_clone_detect)
+
+    # --- taint policy DSL ---
+    p_dsl = sub.add_parser("taint-dsl", help="custom taint policy (YAML)")
+    p_dsl.add_argument("paths", nargs="+")
+    p_dsl.add_argument("--policy", required=True, help="path to policy YAML")
+    p_dsl.add_argument("--json", action="store_true")
+    p_dsl.set_defaults(func=cmd_taint_dsl)
+
+    # --- API security scan ---
+    p_api = sub.add_parser("api-scan", help="OpenAPI/Swagger security scan")
+    p_api.add_argument("paths", nargs="+")
+    p_api.add_argument("--json", action="store_true")
+    p_api.set_defaults(func=cmd_api_scan)
+
+    # --- threat model ---
+    p_tm = sub.add_parser("threat-model", help="auto-STRIDE threat model")
+    p_tm.add_argument("paths", nargs="+")
+    p_tm.add_argument("--json", action="store_true")
+    p_tm.set_defaults(func=cmd_threat_model)
+
+    # --- SBOM ---
+    p_sbom = sub.add_parser("sbom", help="generate SBOM (CycloneDX/SPDX)")
+    p_sbom.add_argument("paths", nargs="+")
+    p_sbom.add_argument("--format", choices=["cyclonedx", "spdx", "summary"],
+                        default="summary")
+    p_sbom.add_argument("--project", default="attestor-project")
+    p_sbom.add_argument("--json", action="store_true")
+    p_sbom.set_defaults(func=cmd_sbom)
 
     # --- version ---
     p_ver = sub.add_parser("version", help="show version and AI status")

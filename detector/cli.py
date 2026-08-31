@@ -579,6 +579,90 @@ def cmd_confirm(args):
     return min(sum(1 for r in results if r.status == "CONFIRMED"), 250)
 
 
+def cmd_council(args):
+    import model_council
+    _banner()
+    council = model_council.Council.discover()
+    if args.add_remote:
+        for entry in args.add_remote:
+            parts = entry.split("|")
+            url = parts[0].strip()
+            name = parts[1].strip() if len(parts) > 1 else f"remote-{len(council)}"
+            key = parts[2].strip() if len(parts) > 2 else None
+            council.add_remote(url, name, api_key=key)
+    if not council.members:
+        print("  No council members found.\n"
+              "  Install models:\n"
+              "    - Drop .gguf files in detector/models/\n"
+              "    - Run Ollama (ollama serve) with models pulled\n"
+              "    - Set ATTESTOR_COUNCIL_ENDPOINTS for remote models\n"
+              "    - Use --add-remote URL|name to add a Colab endpoint")
+        return 1
+    print(f"\n  Model Council -- {len(council)} members\n")
+    for m in council.roster():
+        print(f"    {m['name']:20s} ({m['backend']:12s}) {m['model']}")
+    if args.roster:
+        return 0
+    findings = _collect_findings(args.paths)
+    if not findings:
+        print("\n  No findings to adjudicate.")
+        return 0
+    verdicts = council.adjudicate(findings, parallel=not args.sequential)
+    if args.json:
+        print(json.dumps(model_council.to_dict(verdicts), indent=2))
+    else:
+        print(model_council.render(verdicts))
+    return min(sum(1 for v in verdicts if v.verdict == "EXPLOITABLE"), 250)
+
+
+def _collect_findings(paths):
+    try:
+        import killchain
+        return killchain._collect_findings(paths)
+    except Exception:
+        pass
+    try:
+        import dataflow
+        flows = dataflow.scan_paths(paths)
+        return [
+            {"category": f.sink_type, "cwe": f.cwe, "severity": f.severity,
+             "file": f.sink_file, "line": f.sink_line,
+             "description": f"taint flow: {f.source_type} -> {f.sink_type}",
+             "interprocedural": f.interprocedural,
+             "trace": [{"file": s.file, "line": s.line, "note": s.note} for s in f.trace]}
+            for f in flows
+        ]
+    except Exception:
+        pass
+    try:
+        import detect
+        findings = []
+        for p in paths:
+            if os.path.isdir(p):
+                for root, _, files in os.walk(p):
+                    for fn in files:
+                        if fn.endswith((".py", ".js", ".ts", ".java", ".go", ".c", ".cpp")):
+                            fp = os.path.join(root, fn)
+                            try:
+                                with open(fp, encoding="utf-8", errors="replace") as f:
+                                    src = f.read()
+                                findings.extend(detect.scan(src, fp))
+                            except Exception:
+                                pass
+            elif os.path.isfile(p):
+                with open(p, encoding="utf-8", errors="replace") as f:
+                    src = f.read()
+                findings.extend(detect.scan(src, p))
+        return [
+            {"category": getattr(f, "rule", ""), "severity": getattr(f, "severity", "MEDIUM"),
+             "cwe": getattr(f, "cwe", ""), "file": getattr(f, "file", p),
+             "line": getattr(f, "line", 0), "description": getattr(f, "message", "")}
+            for f in findings
+        ]
+    except Exception:
+        return []
+
+
 def cmd_audit(args):
     import dataflow, adjudicate
     _banner()
@@ -1553,6 +1637,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_ag.add_argument("--output", "-o", default="attack-graph.html",
                       help="output HTML file (default: attack-graph.html)")
     p_ag.set_defaults(func=cmd_attack_graph)
+
+    # --- council (multi-model ensemble adjudication) ---
+    p_council = sub.add_parser("council",
+                               help="multi-model ensemble adjudication (model council)",
+                               aliases=["ensemble", "jury"])
+    p_council.add_argument("paths", nargs="*", default=["."],
+                           help="files or directories to scan")
+    p_council.add_argument("--roster", action="store_true",
+                           help="list available council members and exit")
+    p_council.add_argument("--add-remote", action="append", metavar="URL|NAME",
+                           help="add remote model endpoint (URL|name|key)")
+    p_council.add_argument("--sequential", action="store_true",
+                           help="run models sequentially (default: parallel)")
+    p_council.add_argument("--json", action="store_true")
+    p_council.set_defaults(func=cmd_council)
 
     # --- bench (dataflow engine vs baselines) ---
     p_bench = sub.add_parser("bench", help="benchmark dataflow engine vs legacy/Bandit")

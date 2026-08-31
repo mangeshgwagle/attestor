@@ -229,19 +229,24 @@ def to_dict(clones: list[CloneGroup], nears: list[NearClone]) -> list[dict]:
 
 def render(clones: list[CloneGroup], nears: list[NearClone]) -> str:
     if not clones and not nears:
-        return "  No code clones detected."
+        return "  no clones found. either this codebase is well-factored or it's too small to tell."
+    total_dupes = sum(g.size for g in clones)
     lines = [
-        f"\n  Semantic Clone Detection -- {len(clones)} exact group(s), "
-        f"{len(nears)} near-clone(s)",
+        f"\n  Semantic Clone Detection",
         "  " + "=" * 62,
+        f"  {len(clones)} exact clone group(s) ({total_dupes} duplicated functions) | "
+        f"{len(nears)} near-clone(s)",
+        f"  a bug in one copy is a bug in all of them.",
     ]
     for g in clones:
-        lines.append(f"\n  [EXACT CLONE] {g.size} copies, fingerprint {g.fingerprint}")
+        lines.append(f"\n  [EXACT CLONE] {g.size} identical copies (fp {g.fingerprint})")
         for m in g.members:
             lines.append(f"    {m.name}() at {os.path.basename(m.file)}:{m.line} "
-                         f"({m.node_count} nodes)")
+                         f"({m.node_count} AST nodes)")
     for n in nears:
-        lines.append(f"\n  [NEAR CLONE] {n.similarity:.0%} similar")
+        lines.append(f"\n  [NEAR CLONE] {n.similarity:.0%} structurally similar")
         lines.append(f"    {n.func_a.name}() at {os.path.basename(n.func_a.file)}:{n.func_a.line}")
         lines.append(f"    {n.func_b.name}() at {os.path.basename(n.func_b.file)}:{n.func_b.line}")
+    if clones:
+        lines.append(f"\n  extract shared logic. fix one bug, fix them all.")
     return "\n".join(lines)

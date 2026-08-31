@@ -283,7 +283,7 @@ def to_spdx(deps: list[Dependency], project_name: str = "attestor-project") -> d
 
 def render(deps: list[Dependency]) -> str:
     if not deps:
-        return "  No dependencies found for SBOM generation."
+        return "  no dependencies found. either this project is vendored or you're pointing at the wrong path."
     by_eco = {}
     for d in deps:
         by_eco.setdefault(d.ecosystem, []).append(d)

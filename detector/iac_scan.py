@@ -79,6 +79,18 @@ _DOCKERFILE_RULES = [
         "description": "SSH port exposed in container -- prefer exec/attach",
         "cwe": "CWE-284", "category": "network",
     },
+    {
+        "id": "DOCKER-007", "severity": "MEDIUM",
+        "pattern": r"^\s*RUN\s+.*curl\s+.*\|\s*sh",
+        "description": "Piping curl to shell -- supply chain risk, verify checksums",
+        "cwe": "CWE-829", "category": "supply_chain",
+    },
+    {
+        "id": "DOCKER-008", "severity": "LOW",
+        "pattern": r"^\s*RUN\s+.*apt-get\s+install\s+(?!.*--no-install-recommends)",
+        "description": "apt-get install without --no-install-recommends bloats the image",
+        "cwe": "CWE-1104", "category": "hardening",
+    },
 ]
 
 _TERRAFORM_RULES = [
@@ -175,6 +187,39 @@ _K8S_RULES = [
         "description": "Container uses :latest tag -- pin a specific version",
         "cwe": "CWE-829", "category": "supply_chain",
     },
+    {
+        "id": "K8S-008", "severity": "HIGH",
+        "pattern": r"hostPath\s*:",
+        "description": "Pod mounts hostPath volume -- container escape risk",
+        "cwe": "CWE-284", "category": "filesystem",
+    },
+    {
+        "id": "K8S-009", "severity": "MEDIUM",
+        "pattern": r"automountServiceAccountToken\s*:\s*true",
+        "description": "Service account token auto-mounted -- disable if not needed",
+        "cwe": "CWE-284", "category": "privilege",
+    },
+]
+
+_COMPOSE_RULES = [
+    {
+        "id": "COMPOSE-001", "severity": "HIGH",
+        "pattern": r"privileged\s*:\s*true",
+        "description": "Compose service runs privileged",
+        "cwe": "CWE-250", "category": "privilege",
+    },
+    {
+        "id": "COMPOSE-002", "severity": "HIGH",
+        "pattern": r'(?i)(password|secret|api_key)\s*:\s*["\']?[^${\s][^"\'\s]{3,}',
+        "description": "Hard-coded secret in docker-compose -- use .env or secrets",
+        "cwe": "CWE-798", "category": "secrets",
+    },
+    {
+        "id": "COMPOSE-003", "severity": "MEDIUM",
+        "pattern": r"network_mode\s*:\s*host",
+        "description": "Compose service uses host network",
+        "cwe": "CWE-284", "category": "network",
+    },
 ]
 
 _CFN_RULES = [
@@ -205,6 +250,8 @@ def _detect_file_type(path: str) -> str:
         return "dockerfile"
     if name.endswith((".tf", ".tf.json")):
         return "terraform"
+    if name.startswith("docker-compose") or name.startswith("compose."):
+        return "compose"
     if name.endswith((".yaml", ".yml")):
         try:
             with open(path, encoding="utf-8", errors="replace") as f:
@@ -213,6 +260,8 @@ def _detect_file_type(path: str) -> str:
                 return "kubernetes"
             if "AWSTemplateFormatVersion" in head or "AWS::CloudFormation" in head:
                 return "cloudformation"
+            if "services:" in head and ("image:" in head or "build:" in head):
+                return "compose"
         except OSError:
             pass
     if name.endswith(".json"):
@@ -246,7 +295,7 @@ def _no_user_directive(path: str, lines: list[str]) -> list[IaCFinding]:
     has_from = any(re.match(r"^\s*FROM\s+", l) for l in lines)
     if has_from and not has_user:
         return [IaCFinding(
-            rule_id="DOCKER-007", severity="MEDIUM",
+            rule_id="DOCKER-009", severity="MEDIUM",
             file=path, line=1, code="(no USER directive found)",
             description="No USER directive -- container defaults to root",
             category="privilege", cwe="CWE-250",
@@ -258,7 +307,7 @@ def _no_resource_limits(path: str, content: str) -> list[IaCFinding]:
     if "kind:" in content and "containers:" in content:
         if "resources:" not in content:
             return [IaCFinding(
-                rule_id="K8S-008", severity="MEDIUM",
+                rule_id="K8S-010", severity="MEDIUM",
                 file=path, line=1, code="(no resources: section)",
                 description="No resource limits/requests -- DoS risk",
                 category="resilience", cwe="CWE-770",
@@ -271,6 +320,7 @@ _FILE_TYPE_RULES = {
     "terraform": _TERRAFORM_RULES,
     "kubernetes": _K8S_RULES,
     "cloudformation": _CFN_RULES,
+    "compose": _COMPOSE_RULES,
 }
 
 
@@ -323,11 +373,14 @@ def to_dict(findings: list[IaCFinding]) -> list[dict]:
 
 def render(findings: list[IaCFinding]) -> str:
     if not findings:
-        return "  No IaC security issues found."
+        return "  infrastructure looks tight. no misconfigs, no exposed secrets, no privilege escalation."
+    crits = sum(1 for f in findings if f.severity == "CRITICAL")
     lines = [
         f"\n  IaC Security Scan -- {len(findings)} issue(s)",
         "  " + "=" * 62,
     ]
+    if crits:
+        lines.append(f"  {crits} critical. these are the ones that get you on the front page.")
     order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
     for f in sorted(findings, key=lambda x: order.get(x.severity, 9)):
         lines.append(f"\n  [{f.severity}] {f.rule_id} at "

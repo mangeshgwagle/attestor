@@ -266,7 +266,42 @@ class _Interpreter(ast.NodeVisitor):
     def visit_Expr(self, node):
         if isinstance(node.value, ast.Subscript):
             self._eval_expr(node.value)
+        if isinstance(node.value, ast.Call):
+            self._check_dangerous_call(node.value)
         self.generic_visit(node)
+
+    def _check_dangerous_call(self, node):
+        func_name = ""
+        if isinstance(node.func, ast.Attribute):
+            func_name = node.func.attr
+        elif isinstance(node.func, ast.Name):
+            func_name = node.func.id
+        if func_name == "pack" and node.args:
+            for arg in node.args[1:]:
+                r = self._eval_expr(arg)
+                if r.overflows_32():
+                    self.findings.append(AIFinding(
+                        category="struct_truncation", severity="HIGH",
+                        file=self.filepath, line=node.lineno,
+                        code=self._code_at(node.lineno),
+                        description=f"struct.pack may truncate: value range [{r.lo}, {r.hi}] "
+                                    f"exceeds 32-bit",
+                        variable="pack_arg", range_lo=r.lo, range_hi=r.hi,
+                        cwe="CWE-681",
+                    ))
+        if func_name in ("c_int", "c_uint", "c_short", "c_ushort",
+                         "c_int32", "c_uint32") and node.args:
+            r = self._eval_expr(node.args[0])
+            if r.overflows_32():
+                self.findings.append(AIFinding(
+                    category="ctypes_truncation", severity="HIGH",
+                    file=self.filepath, line=node.lineno,
+                    code=self._code_at(node.lineno),
+                    description=f"ctypes cast to {func_name} may truncate: "
+                                f"range [{r.lo}, {r.hi}]",
+                    variable="ctypes_arg", range_lo=r.lo, range_hi=r.hi,
+                    cwe="CWE-681",
+                ))
 
 
 def scan_source(source: str, filepath: str = "<string>") -> list[AIFinding]:
@@ -323,9 +358,11 @@ def to_dict(findings: list[AIFinding]) -> list[dict]:
 
 def render(findings: list[AIFinding]) -> str:
     if not findings:
-        return "  No abstract interpretation issues found."
+        return "  clean. no overflows, no div-by-zero, no dodgy indices. nice one."
+    high = sum(1 for f in findings if f.severity == "HIGH")
     lines = [
-        f"\n  Abstract Interpretation -- {len(findings)} issue(s)",
+        f"\n  Abstract Interpretation -- {len(findings)} issue(s)"
+        f"{f', {high} high-severity' if high else ''}",
         "  " + "=" * 62,
     ]
     order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
@@ -333,5 +370,7 @@ def render(findings: list[AIFinding]) -> str:
         lines.append(f"\n  [{f.severity}] {f.category} at "
                      f"{os.path.basename(f.file)}:{f.line}")
         lines.append(f"    {f.description}")
-        lines.append(f"    range: [{f.range_lo}, {f.range_hi}]")
+        lines.append(f"    value range: [{f.range_lo}, {f.range_hi}]")
+    if high:
+        lines.append(f"\n  {high} of these will crash in production. fix them.")
     return "\n".join(lines)

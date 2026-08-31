@@ -88,6 +88,18 @@ _LOGGING_PATTERNS = re.compile(
     r"\b(logger\.\w+|logging\.\w+|log\.\w+|audit_log|"
     r"print|console\.log)\s*\(", re.I)
 
+_FILE_UPLOAD_PATTERNS = re.compile(
+    r"\b(save|upload|store|write_file|put_object|"
+    r"request\.files|FileField|FileUpload|multer)\b", re.I)
+
+_CRYPTO_PATTERNS = re.compile(
+    r"\b(md5|sha1|DES|RC4|ECB|random\.random|"
+    r"random\.randint|pickle\.loads|yaml\.load\b(?!.*Loader))\b", re.I)
+
+_SESSION_PATTERNS = re.compile(
+    r"\b(session\[|set_cookie|jwt\.encode|jwt\.decode|"
+    r"token.*expire|refresh_token)\b", re.I)
+
 
 def _extract_py_components(source: str, filepath: str) -> tuple[
         list[Component], list[TrustBoundary]]:
@@ -156,6 +168,25 @@ def _extract_py_components(source: str, filepath: str) -> tuple[
             boundaries.append(TrustBoundary(
                 name="input_validation", file=filepath, line=lineno,
                 kind="validation",
+            ))
+        if _FILE_UPLOAD_PATTERNS.search(line):
+            components.append(Component(
+                type="file_upload", name="file_upload",
+                file=filepath, line=lineno,
+                details=line.strip()[:80],
+            ))
+        if _CRYPTO_PATTERNS.search(line):
+            match = _CRYPTO_PATTERNS.search(line)
+            components.append(Component(
+                type="crypto", name=match.group(1),
+                file=filepath, line=lineno,
+                details=line.strip()[:80],
+            ))
+        if _SESSION_PATTERNS.search(line):
+            components.append(Component(
+                type="session_mgmt", name="session",
+                file=filepath, line=lineno,
+                details=line.strip()[:80],
             ))
 
     return components, boundaries
@@ -259,6 +290,40 @@ def _generate_threats(components: list[Component],
                 cwe="CWE-918",
             ))
 
+        if comp.type == "file_upload":
+            threats.append(Threat(
+                stride_category="Tampering",
+                component=comp,
+                description=f"File upload at {os.path.basename(comp.file)}:{comp.line} "
+                            f"may accept malicious files (webshells, path traversal)",
+                severity="HIGH",
+                mitigation="Validate file type, size, and name; store outside webroot; "
+                           "never execute uploaded content",
+                cwe="CWE-434",
+            ))
+
+        if comp.type == "crypto":
+            threats.append(Threat(
+                stride_category="Information Disclosure",
+                component=comp,
+                description=f"Weak crypto '{comp.name}' at {os.path.basename(comp.file)}:"
+                            f"{comp.line}",
+                severity="HIGH",
+                mitigation="Use SHA-256+, AES-GCM, secrets.token_bytes() instead",
+                cwe="CWE-327",
+            ))
+
+        if comp.type == "session_mgmt":
+            threats.append(Threat(
+                stride_category="Spoofing",
+                component=comp,
+                description=f"Session management at {os.path.basename(comp.file)}:{comp.line} "
+                            f"-- verify token expiry, rotation, and secure cookie flags",
+                severity="MEDIUM",
+                mitigation="Set HttpOnly, Secure, SameSite flags; enforce token expiry",
+                cwe="CWE-613",
+            ))
+
     return threats
 
 
@@ -319,10 +384,14 @@ def to_dict(threats: list[Threat]) -> list[dict]:
 
 def render(comps: list[Component], bounds: list[TrustBoundary],
            threats: list[Threat]) -> str:
+    if not comps:
+        return "  nothing to model. either this is a library with no entry points, or it's empty."
+    high_threats = sum(1 for t in threats if t.severity == "HIGH")
     lines = [
-        f"\n  Threat Model (STRIDE) -- {len(comps)} component(s), "
-        f"{len(bounds)} trust boundary(ies), {len(threats)} threat(s)",
+        f"\n  Threat Model (STRIDE)",
         "  " + "=" * 62,
+        f"  {len(comps)} component(s) | {len(bounds)} trust boundary(ies) | "
+        f"{len(threats)} threat(s) ({high_threats} high)",
     ]
 
     by_type = {}

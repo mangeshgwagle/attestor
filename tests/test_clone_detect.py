@@ -138,7 +138,7 @@ def test_render():
     nears = clone_detect.find_near_clones(sigs)
     output = clone_detect.render(clones, nears)
     assert "EXACT CLONE" in output
-    assert "2 copies" in output
+    assert "fa()" in output and "fb()" in output
 
 
 def test_cross_file_clones(tmp_path):

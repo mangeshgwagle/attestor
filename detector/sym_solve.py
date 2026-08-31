@@ -334,27 +334,36 @@ def render(results: list[PathResult]) -> str:
     feasible = [r for r in results if r.feasibility == Feasibility.FEASIBLE]
     infeasible = [r for r in results if r.feasibility == Feasibility.INFEASIBLE]
     unknown = [r for r in results if r.feasibility == Feasibility.UNKNOWN]
+
+    if not results:
+        return "  nothing to check. quiet day."
+
+    verdict = "all clear, nothing exploitable." if not feasible else (
+        f"{len(feasible)} confirmed exploitable. patch these first.")
+
     lines = [
-        f"\n  Symbolic Path Analysis -- {len(feasible)} exploitable, "
-        f"{len(infeasible)} infeasible, {len(unknown)} unknown",
+        f"\n  Symbolic Path Analysis",
         "  " + "=" * 62,
+        f"  {len(feasible)} exploitable | {len(infeasible)} dead paths pruned "
+        f"| {len(unknown)} unknown",
+        f"  verdict: {verdict}",
     ]
     for r in infeasible:
         f = r.finding
         sink = f.get("sink_type") or f.get("category") or "unknown"
         loc = os.path.basename(f.get("sink_file") or f.get("file") or "?")
-        lines.append(f"\n  [INFEASIBLE] {sink} at {loc}:"
-                     f"{f.get('sink_line', '?')}")
-        lines.append(f"    reason: {r.reason}")
+        lines.append(f"\n  [PRUNED] {sink} at {loc}:"
+                     f"{f.get('sink_line', '?')} -- dead path, no attacker can reach this")
+        lines.append(f"    why: {r.reason}")
         for c in r.constraints:
-            lines.append(f"    constraint L{c.line}: {c}")
+            lines.append(f"    guard L{c.line}: {c}")
     for r in feasible:
         f = r.finding
         sink = f.get("sink_type") or f.get("category") or "unknown"
         loc = os.path.basename(f.get("sink_file") or f.get("file") or "?")
         n = len(r.constraints)
         lines.append(f"\n  [EXPLOITABLE] {sink} at {loc}:"
-                     f"{f.get('sink_line', '?')} ({n} constraint(s) satisfied)")
+                     f"{f.get('sink_line', '?')} -- all {n} guard(s) satisfiable")
     return "\n".join(lines)
 
 

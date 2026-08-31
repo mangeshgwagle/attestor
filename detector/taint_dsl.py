@@ -289,7 +289,7 @@ def render(findings: list[DSLFinding]) -> str:
     active = [f for f in findings if not f.sanitized]
     sanitized = [f for f in findings if f.sanitized]
     if not findings:
-        return "  No taint policy violations found."
+        return "  no policy violations. either the code is clean or the policy needs more rules."
     lines = [
         f"\n  Taint Policy DSL -- {len(active)} active, "
         f"{len(sanitized)} sanitized",

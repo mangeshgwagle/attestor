@@ -145,10 +145,10 @@ def test_render():
     r2 = sym_solve.analyze_finding(
         {"sink_line": 3, "sink_type": "cmd_inject", "sink_file": "b.py"}, code_feasible)
     output = sym_solve.render([r1, r2])
-    assert "INFEASIBLE" in output
+    assert "PRUNED" in output
     assert "EXPLOITABLE" in output
     assert "1 exploitable" in output
-    assert "1 infeasible" in output
+    assert "1 dead" in output
 
 
 def test_is_none_and_compare():

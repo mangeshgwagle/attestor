@@ -222,6 +222,36 @@ def scan_spec(spec: dict, filepath: str = "") -> list[APIFinding]:
                         spec_file=filepath,
                     ))
 
+                if (p_schema.get("type") == "integer"
+                        and "maximum" not in p_schema
+                        and param.get("name", "").lower() in
+                        ("limit", "page_size", "pagesize", "count", "offset")):
+                    pname = param.get("name", "?")
+                    findings.append(APIFinding(
+                        rule_id="API-008", severity="MEDIUM",
+                        path=path_str, method=method.upper(),
+                        description=f"Pagination param '{pname}' has no maximum -- "
+                                    f"attacker can request millions of records",
+                        category="dos_vector", cwe="CWE-770",
+                        spec_file=filepath,
+                    ))
+
+            if method == "get" and not op_security:
+                resp_200 = operation.get("responses", {}).get("200", {})
+                if isinstance(resp_200, dict):
+                    for ct, media in resp_200.get("content", {}).items():
+                        if isinstance(media, dict):
+                            schema = _get_schema(media.get("schema", {}), spec)
+                            if schema.get("type") == "array" and "maxItems" not in schema:
+                                findings.append(APIFinding(
+                                    rule_id="API-009", severity="MEDIUM",
+                                    path=path_str, method="GET",
+                                    description=f"Unauthenticated array endpoint {path_str} "
+                                                f"has no maxItems -- enumeration risk",
+                                    category="enumeration", cwe="CWE-200",
+                                    spec_file=filepath,
+                                ))
+
     return findings
 
 
@@ -273,11 +303,14 @@ def to_dict(findings: list[APIFinding]) -> list[dict]:
 
 def render(findings: list[APIFinding]) -> str:
     if not findings:
-        return "  No API security issues found."
+        return "  spec looks solid. no auth gaps, no BOLA, no mass assignment."
+    high = sum(1 for f in findings if f.severity in ("HIGH", "CRITICAL"))
     lines = [
         f"\n  API Security Scan -- {len(findings)} issue(s)",
         "  " + "=" * 62,
     ]
+    if high:
+        lines.append(f"  {high} high/critical -- these are real attack surface, not hypothetical.")
     order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
     for f in sorted(findings, key=lambda x: order.get(x.severity, 9)):
         lines.append(f"\n  [{f.severity}] {f.rule_id} {f.method} {f.path}")

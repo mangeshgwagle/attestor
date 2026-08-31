@@ -33,10 +33,6 @@
     attestor baseline create        # create finding suppression baseline
     attestor hooks install          # install git pre-commit hook
     attestor watch .                # watch mode (auto-rescan)
-    attestor ai explain app.py      # AI explains findings
-    attestor ai fix app.py          # AI suggests fixes
-    attestor ai review app.py       # AI deep review
-    attestor ai ask "question"      # ask Owen Coder anything
     attestor sym-solve .             # symbolic path feasibility
     attestor abstract .              # abstract interpretation (value ranges)
     attestor clones .                # semantic clone detection
@@ -344,66 +340,6 @@ def _get_findings(path: str):
         return src, findings
 
 
-def cmd_ai_explain(args):
-    import ai_engine
-    _check_ai()
-    src, findings = _get_findings(args.file)
-    if not findings:
-        print(f"No findings in {args.file} -- code looks clean.")
-        return 0
-    model = getattr(args, "model", None)
-    print(f"\n[Owen Coder] Explaining {len(findings)} finding(s) in {args.file}...\n")
-    ai_engine.explain_findings(src, findings, args.file, model=model)
-    return 0
-
-
-def cmd_ai_fix(args):
-    import ai_engine
-    _check_ai()
-    src, findings = _get_findings(args.file)
-    if not findings:
-        print(f"No findings in {args.file} -- nothing to fix.")
-        return 0
-    model = getattr(args, "model", None)
-    print(f"\n[Owen Coder] Generating fixes for {len(findings)} finding(s)...\n")
-    ai_engine.suggest_fixes(src, findings, args.file, model=model)
-    return 0
-
-
-def cmd_ai_review(args):
-    import ai_engine
-    _check_ai()
-    src = _read_source(args.file)
-    model = getattr(args, "model", None)
-    print(f"\n[Owen Coder] Deep reviewing {args.file}...\n")
-    ai_engine.ai_review(src, args.file, model=model)
-    return 0
-
-
-def cmd_ai_ask(args):
-    import ai_engine
-    _check_ai()
-    context = ""
-    if args.file:
-        context = _read_source(args.file)
-    model = getattr(args, "model", None)
-    print("\n[Owen Coder]\n")
-    ai_engine.ask(args.question, context=context, model=model)
-    return 0
-
-
-def cmd_ai_agent(args):
-    import ai_engine
-    _check_ai()
-    context = ""
-    if args.file:
-        context = _read_source(args.file)
-    model = getattr(args, "model", None)
-    print("\n[Owen Coder Agent]\n")
-    ai_engine.agent_loop(args.question, context=context, model=model)
-    return 0
-
-
 def cmd_ai_models(_args):
     import ai_engine
     _check_ai_soft()
@@ -646,7 +582,7 @@ def cmd_confirm(args):
 def cmd_audit(args):
     import dataflow, adjudicate
     _banner()
-    print(f"\n  Attestor Audit -- dataflow + Owen Coder adjudication (hybrid)\n")
+    print(f"\n  Attestor Audit -- dataflow + adjudication\n")
     findings = dataflow.scan_paths(args.paths)
     if not findings:
         print("  No taint flows found.")
@@ -995,17 +931,6 @@ def cmd_sbom(args):
     return 0
 
 
-def cmd_flywheel(args):
-    import flywheel
-    _banner()
-    root = args.root
-    out = args.out or "flywheel_pairs.jsonl"
-    print(f"\n  Flywheel -- harvesting training pairs from {root}\n")
-    stats = flywheel.harvest(root, out, auto=args.auto, model=args.model)
-    print(json.dumps(stats, indent=2))
-    return 0
-
-
 def cmd_fix(args):
     import autofix
     _banner()
@@ -1210,15 +1135,8 @@ def cmd_version(_args):
     _banner()
     print(f"  Attestor {VERSION}")
     print(f"  Python   {sys.version.split()[0]}")
-    try:
-        import ai_engine
-        if ai_engine.is_available():
-            loaded = "ready" if ai_engine.model_loaded() else "model not loaded"
-            print(f"  Owen AI  {ai_engine.OLLAMA_MODEL} ({loaded})")
-        else:
-            print(f"  Owen AI  offline (Ollama not running)")
-    except Exception:
-        print(f"  Owen AI  unavailable")
+    print(f"  engines  dataflow, taint, sym-solve, abstract-interp, clone-detect,")
+    print(f"           api-scan, threat-model, sbom, iac, ci, dep-scan, reachability")
     print()
     return 0
 
@@ -1226,7 +1144,7 @@ def cmd_version(_args):
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="attestor",
-        description="Attestor 4.2 -- multi-language static analysis + AI",
+        description="Attestor 4.3 -- the scanner that never sleeps",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -1366,10 +1284,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_conf.add_argument("--json", action="store_true")
     p_conf.set_defaults(func=cmd_confirm)
 
-    # --- audit (flagship hybrid: dataflow + Owen Coder adjudication) ---
-    p_audit = sub.add_parser("audit", help="HYBRID: dataflow + Owen Coder adjudication")
+    # --- audit (flagship hybrid: dataflow + adjudication) ---
+    p_audit = sub.add_parser("audit", help="HYBRID: dataflow + adjudication")
     p_audit.add_argument("paths", nargs="+", help="files or directories")
-    p_audit.add_argument("--model", help="override Owen Coder model")
+    p_audit.add_argument("--model", help="override adjudication model")
     p_audit.add_argument("--json", action="store_true")
     p_audit.set_defaults(func=cmd_audit)
 
@@ -1521,15 +1439,6 @@ def build_parser() -> argparse.ArgumentParser:
                        help="launch msfconsole -r on the generated .rc")
     p_xpl.set_defaults(func=cmd_exploit)
 
-    # --- flywheel (findings -> Owen Coder training data) ---
-    p_fly = sub.add_parser("flywheel", help="turn findings into Owen Coder training pairs")
-    p_fly.add_argument("root", nargs="?", default=".")
-    p_fly.add_argument("--out", "-o", help="output JSONL (default: flywheel_pairs.jsonl)")
-    p_fly.add_argument("--auto", action="store_true",
-                       help="use Owen Coder to label the ambiguous review bucket")
-    p_fly.add_argument("--model", help="override model for auto-labeling")
-    p_fly.set_defaults(func=cmd_flywheel)
-
     # --- report (HTML) ---
     p_rep = sub.add_parser("report", help="generate HTML security report dashboard")
     p_rep.add_argument("root", nargs="?", default=".")
@@ -1584,41 +1493,6 @@ def build_parser() -> argparse.ArgumentParser:
     p_watch.add_argument("--modes", default="secrets,exploits",
                          help="comma-separated scan modes (secrets,exploits,js,iac,payloads)")
     p_watch.set_defaults(func=cmd_watch)
-
-    # --- ai (Owen Coder subcommands) ---
-    p_ai = sub.add_parser("ai", help="Owen Coder AI assistant")
-    ai_sub = p_ai.add_subparsers(dest="ai_command")
-
-    p_ai_explain = ai_sub.add_parser("explain",
-                                     help="explain findings with AI")
-    p_ai_explain.add_argument("file")
-    p_ai_explain.add_argument("--model", help="override model (e.g. owen-coder-7b)")
-    p_ai_explain.set_defaults(func=cmd_ai_explain)
-
-    p_ai_fix = ai_sub.add_parser("fix", help="AI-generated fixes")
-    p_ai_fix.add_argument("file")
-    p_ai_fix.add_argument("--model", help="override model (e.g. owen-coder-7b)")
-    p_ai_fix.set_defaults(func=cmd_ai_fix)
-
-    p_ai_review = ai_sub.add_parser("review", help="AI deep code review")
-    p_ai_review.add_argument("file")
-    p_ai_review.add_argument("--model", help="override model (e.g. owen-coder-7b)")
-    p_ai_review.set_defaults(func=cmd_ai_review)
-
-    p_ai_ask = ai_sub.add_parser("ask", help="ask Owen Coder anything")
-    p_ai_ask.add_argument("question")
-    p_ai_ask.add_argument("--file", help="file for context")
-    p_ai_ask.add_argument("--model", help="override model (e.g. owen-coder-7b)")
-    p_ai_ask.set_defaults(func=cmd_ai_ask)
-
-    p_ai_models = ai_sub.add_parser("models", help="show model roster and routing")
-    p_ai_models.set_defaults(func=cmd_ai_models)
-
-    p_ai_agent = ai_sub.add_parser("agent", help="tool-using AI agent")
-    p_ai_agent.add_argument("question")
-    p_ai_agent.add_argument("--file", help="file for context")
-    p_ai_agent.add_argument("--model", help="override model")
-    p_ai_agent.set_defaults(func=cmd_ai_agent)
 
     # --- control (Owner Control) ---
     p_ctrl = sub.add_parser("control", help="Owner Control 4.2")

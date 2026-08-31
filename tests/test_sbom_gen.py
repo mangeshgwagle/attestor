@@ -157,5 +157,5 @@ def test_to_dict():
 
 
 def test_no_deps():
-    assert sbom_gen.render([]) == "  No dependencies found for SBOM generation."
+    assert "no dependencies found" in sbom_gen.render([])
     assert sbom_gen.to_dict([]) == []

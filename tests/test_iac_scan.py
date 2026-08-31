@@ -16,7 +16,7 @@ def test_dockerfile_no_user(tmp_path):
     f = tmp_path / "Dockerfile"
     f.write_text("FROM python:3.12\nRUN pip install flask\n", encoding="utf-8")
     findings = iac_scan.scan_file(str(f))
-    assert any(f.rule_id == "DOCKER-007" for f in findings)
+    assert any(f.rule_id == "DOCKER-009" for f in findings)
 
 
 def test_dockerfile_add_instead_of_copy(tmp_path):
@@ -109,7 +109,7 @@ def test_k8s_no_resource_limits(tmp_path):
             image: nginx
     """), encoding="utf-8")
     findings = iac_scan.scan_file(str(f))
-    assert any(f.rule_id == "K8S-008" for f in findings)
+    assert any(f.rule_id == "K8S-010" for f in findings)
 
 
 def test_cfn_public_bucket(tmp_path):
@@ -149,7 +149,7 @@ def test_to_dict():
 
 
 def test_render_no_findings():
-    assert "No IaC" in iac_scan.render([])
+    assert "looks tight" in iac_scan.render([])
 
 
 def test_render_with_findings():
@@ -161,6 +161,125 @@ def test_render_with_findings():
     text = iac_scan.render([f])
     assert "K8S-001" in text
     assert "CRITICAL" in text
+
+
+def test_dockerfile_curl_pipe_sh(tmp_path):
+    f = tmp_path / "Dockerfile"
+    f.write_text("FROM alpine:3.19\nRUN curl https://example.com/install.sh | sh\nUSER app\n", encoding="utf-8")
+    findings = iac_scan.scan_file(str(f))
+    assert any(f.rule_id == "DOCKER-007" for f in findings)
+
+
+def test_dockerfile_apt_no_recommends(tmp_path):
+    f = tmp_path / "Dockerfile"
+    f.write_text("FROM debian:12\nRUN apt-get install python3\nUSER app\n", encoding="utf-8")
+    findings = iac_scan.scan_file(str(f))
+    assert any(f.rule_id == "DOCKER-008" for f in findings)
+
+
+def test_dockerfile_apt_with_recommends_clean(tmp_path):
+    f = tmp_path / "Dockerfile"
+    f.write_text("FROM debian:12\nRUN apt-get install --no-install-recommends python3\nUSER app\n", encoding="utf-8")
+    findings = iac_scan.scan_file(str(f))
+    assert not any(f.rule_id == "DOCKER-008" for f in findings)
+
+
+def test_k8s_hostpath(tmp_path):
+    f = tmp_path / "pod.yaml"
+    f.write_text(textwrap.dedent("""\
+        apiVersion: v1
+        kind: Pod
+        spec:
+          containers:
+          - name: app
+            resources:
+              limits:
+                memory: "128Mi"
+          volumes:
+          - name: data
+            hostPath:
+              path: /var/data
+    """), encoding="utf-8")
+    findings = iac_scan.scan_file(str(f))
+    assert any(f.rule_id == "K8S-008" for f in findings)
+
+
+def test_k8s_automount_token(tmp_path):
+    f = tmp_path / "sa.yaml"
+    f.write_text(textwrap.dedent("""\
+        apiVersion: v1
+        kind: Pod
+        spec:
+          automountServiceAccountToken: true
+          containers:
+          - name: app
+            resources:
+              limits:
+                memory: "128Mi"
+    """), encoding="utf-8")
+    findings = iac_scan.scan_file(str(f))
+    assert any(f.rule_id == "K8S-009" for f in findings)
+
+
+def test_compose_privileged(tmp_path):
+    f = tmp_path / "docker-compose.yml"
+    f.write_text(textwrap.dedent("""\
+        services:
+          web:
+            image: nginx
+            privileged: true
+    """), encoding="utf-8")
+    findings = iac_scan.scan_file(str(f))
+    assert any(f.rule_id == "COMPOSE-001" for f in findings)
+
+
+def test_compose_hardcoded_secret(tmp_path):
+    f = tmp_path / "docker-compose.yml"
+    f.write_text(textwrap.dedent("""\
+        services:
+          db:
+            image: postgres
+            password: supersecret123
+    """), encoding="utf-8")
+    findings = iac_scan.scan_file(str(f))
+    assert any(f.rule_id == "COMPOSE-002" for f in findings)
+
+
+def test_compose_host_network(tmp_path):
+    f = tmp_path / "compose.yaml"
+    f.write_text(textwrap.dedent("""\
+        services:
+          app:
+            image: myapp
+            network_mode: host
+    """), encoding="utf-8")
+    findings = iac_scan.scan_file(str(f))
+    assert any(f.rule_id == "COMPOSE-003" for f in findings)
+
+
+def test_compose_clean(tmp_path):
+    f = tmp_path / "docker-compose.yml"
+    f.write_text(textwrap.dedent("""\
+        services:
+          web:
+            image: nginx:1.25
+            ports:
+              - "80:80"
+    """), encoding="utf-8")
+    findings = iac_scan.scan_file(str(f))
+    assert findings == []
+
+
+def test_compose_detection_by_content(tmp_path):
+    f = tmp_path / "infra.yaml"
+    f.write_text(textwrap.dedent("""\
+        services:
+          web:
+            image: nginx
+            privileged: true
+    """), encoding="utf-8")
+    findings = iac_scan.scan_file(str(f))
+    assert any(f.rule_id == "COMPOSE-001" for f in findings)
 
 
 def test_non_iac_file_skipped(tmp_path):

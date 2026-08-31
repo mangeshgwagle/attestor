@@ -911,7 +911,59 @@ def plan_file(filepath: str) -> list[FixPlan]:
     return plan_fixes(finding_dicts, source, filepath)
 
 
-def fix_file(filepath: str, apply: bool = False) -> tuple[str, list[FixResult]]:
+def verify_fix(result: FixResult, filepath: str) -> FixResult:
+    if not result.applied or not result.fixed:
+        return result
+    import tempfile
+    tmp = None
+    try:
+        import detect
+        suffix = os.path.splitext(filepath)[1] or ".py"
+        tmp = tempfile.NamedTemporaryFile(
+            mode="w", suffix=suffix, delete=False, encoding="utf-8")
+        tmp.write(result.fixed)
+        tmp.close()
+
+        before_findings = detect.scan_file(filepath)
+        after_findings = detect.scan_file(tmp.name)
+
+        target_line = result.plan.line
+        target_cwe = result.plan.cwe
+
+        before_at_line = [
+            f for f in before_findings
+            if getattr(f, "line", 0) == target_line or
+               getattr(f, "sink_line", 0) == target_line
+        ]
+        after_at_line = [
+            f for f in after_findings
+            if getattr(f, "line", 0) == target_line or
+               getattr(f, "sink_line", 0) == target_line
+        ]
+
+        if len(after_at_line) < len(before_at_line):
+            result.verified = True
+            result.verification_note = (
+                f"finding removed: {len(before_at_line)} -> {len(after_at_line)} "
+                f"at line {target_line}")
+        elif len(after_findings) > len(before_findings):
+            result.verified = False
+            result.verification_note = (
+                f"regression: {len(before_findings)} -> {len(after_findings)} "
+                f"total findings")
+        else:
+            result.verified = True
+            result.verification_note = "no regression detected"
+    except Exception as exc:
+        result.verification_note = f"verification skipped: {exc}"
+    finally:
+        if tmp and os.path.exists(tmp.name):
+            os.unlink(tmp.name)
+    return result
+
+
+def fix_file(filepath: str, apply: bool = False,
+             verify: bool = True) -> tuple[str, list[FixResult]]:
     try:
         with open(filepath, encoding="utf-8", errors="replace") as f:
             source = f.read()
@@ -921,7 +973,17 @@ def fix_file(filepath: str, apply: bool = False) -> tuple[str, list[FixResult]]:
     if not plans:
         return source, []
     fixed, results = apply_fixes(plans, source)
-    if apply and any(r.applied for r in results):
+    if verify:
+        for r in results:
+            if r.applied:
+                verify_fix(r, filepath)
+    verified_results = [r for r in results if r.verified or not verify]
+    reverted_results = [r for r in results if not r.verified and verify and r.applied]
+    if reverted_results:
+        for r in reverted_results:
+            r.applied = False
+            r.verification_note = r.verification_note or "failed verification"
+    if apply and any(r.applied and r.verified for r in results):
         with open(filepath, "w", encoding="utf-8", newline="") as f:
             f.write(fixed)
     return fixed, results

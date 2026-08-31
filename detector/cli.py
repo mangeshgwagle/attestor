@@ -969,6 +969,20 @@ def cmd_fix(args):
     return 0
 
 
+def cmd_interproc(args):
+    import interprocedural
+    _banner()
+    print(f"\n  Inter-procedural Analysis -- indexing {', '.join(args.paths)}\n")
+    index = interprocedural.build_index(args.paths)
+    graph = interprocedural.build_call_graph(index)
+    findings = interprocedural.analyze(index, graph, max_depth=args.depth)
+    if args.json:
+        print(json.dumps(interprocedural.to_dict(findings), indent=2))
+    else:
+        print(interprocedural.render(findings, index))
+    return 0
+
+
 def cmd_plan_fix(args):
     import fixengine
     _banner()
@@ -1454,6 +1468,16 @@ def build_parser() -> argparse.ArgumentParser:
                            help="apply planned fixes")
     p_planfix.add_argument("--json", action="store_true")
     p_planfix.set_defaults(func=cmd_plan_fix)
+
+    # --- interproc (cross-function taint analysis) ---
+    p_inter = sub.add_parser("interproc",
+                             help="inter-procedural dataflow -- cross-function taint",
+                             aliases=["xfunc"])
+    p_inter.add_argument("paths", nargs="+", help="files or directories")
+    p_inter.add_argument("--depth", type=int, default=8,
+                         help="max call chain depth (default: 8)")
+    p_inter.add_argument("--json", action="store_true")
+    p_inter.set_defaults(func=cmd_interproc)
 
     # --- bench (dataflow engine vs baselines) ---
     p_bench = sub.add_parser("bench", help="benchmark dataflow engine vs legacy/Bandit")

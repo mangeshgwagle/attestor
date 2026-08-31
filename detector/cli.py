@@ -969,6 +969,51 @@ def cmd_fix(args):
     return 0
 
 
+def cmd_plan_fix(args):
+    import fixengine
+    _banner()
+    print(f"\n  Fix Engine -- planning fixes for {', '.join(args.paths)}\n")
+
+    all_plans = []
+    all_results = []
+    for p in args.paths:
+        if os.path.isfile(p):
+            files = [p]
+        elif os.path.isdir(p):
+            files = []
+            for dp, dn, fn in os.walk(p):
+                dn[:] = [d for d in dn if d not in
+                         {".git", "__pycache__", ".venv", "node_modules"}]
+                for n in fn:
+                    if n.endswith((".py", ".js", ".ts")):
+                        files.append(os.path.join(dp, n))
+        else:
+            continue
+        for filepath in files:
+            plans = fixengine.plan_file(filepath)
+            all_plans.extend(plans)
+            if args.apply and plans:
+                try:
+                    with open(filepath, encoding="utf-8", errors="replace") as f:
+                        source = f.read()
+                    fixed, results = fixengine.apply_fixes(plans, source)
+                    all_results.extend(results)
+                    if any(r.applied for r in results):
+                        with open(filepath, "w", encoding="utf-8", newline="") as f:
+                            f.write(fixed)
+                except OSError:
+                    pass
+
+    if args.json:
+        out = {"plans": fixengine.to_dict(all_plans)}
+        if all_results:
+            out["applied"] = sum(1 for r in all_results if r.applied)
+        print(json.dumps(out, indent=2))
+    else:
+        print(fixengine.render(all_plans, all_results or None))
+    return 0
+
+
 def _collect_all_findings(root: str) -> list[dict]:
     """Collect findings from all scanners for aggregate analysis."""
     all_findings = []
@@ -1400,6 +1445,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_fix.add_argument("--test-cmd", help="custom test command (default: pytest)")
     p_fix.add_argument("--json", action="store_true")
     p_fix.set_defaults(func=cmd_fix)
+
+    # --- plan-fix (AST-aware fix planning with reasoning) ---
+    p_planfix = sub.add_parser("plan-fix",
+                               help="plan AST-aware security fixes with reasoning")
+    p_planfix.add_argument("paths", nargs="+", help="files or directories")
+    p_planfix.add_argument("--apply", action="store_true",
+                           help="apply planned fixes")
+    p_planfix.add_argument("--json", action="store_true")
+    p_planfix.set_defaults(func=cmd_plan_fix)
 
     # --- bench (dataflow engine vs baselines) ---
     p_bench = sub.add_parser("bench", help="benchmark dataflow engine vs legacy/Bandit")

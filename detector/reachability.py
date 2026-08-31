@@ -103,27 +103,97 @@ class _Collector(ast.NodeVisitor):
         self.generic_visit(node)
 
 
+_JS_EXTENSIONS = {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}
+
+_JS_FUNC_RE = re.compile(
+    r"(?:(?:export\s+)?(?:async\s+)?function\s+(\w+)|"
+    r"(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\(?|"
+    r"(\w+)\s*\([^)]*\)\s*\{)")
+
+_JS_ENTRY_PATTERNS = [
+    re.compile(r'(?:app|router)\.(get|post|put|delete|patch|all|use)\s*\('),
+    re.compile(r'module\.exports\s*='),
+    re.compile(r'export\s+default\s+'),
+    re.compile(r'export\s+(?:async\s+)?function\s+'),
+    re.compile(r'addEventListener\s*\('),
+]
+
+_JS_SKIP = {"if", "for", "while", "switch", "catch", "return", "throw",
+            "new", "typeof", "else", "try", "class"}
+
+
+_JS_NAMED_FUNC_RE = re.compile(r"\bfunction\s+(\w+)\s*\(")
+
+def _collect_js(filepath: str, source: str) -> list[Func]:
+    funcs = []
+    lines = source.splitlines()
+    call_re = re.compile(r"\b(\w+)\s*\(")
+    current: Func | None = None
+    for i, line in enumerate(lines):
+        named = _JS_NAMED_FUNC_RE.search(line)
+        m = _JS_FUNC_RE.search(line) if not named else None
+        if named:
+            name = named.group(1)
+        elif m:
+            name = m.group(1) or m.group(2) or m.group(3)
+        else:
+            name = None
+        if name and name not in _JS_SKIP:
+                if current:
+                    current.end = i
+                    funcs.append(current)
+                is_entry = any(p.search(line) for p in _JS_ENTRY_PATTERNS)
+                if i > 0:
+                    is_entry = is_entry or any(
+                        p.search(lines[i-1]) for p in _JS_ENTRY_PATTERNS)
+                reason = ""
+                if is_entry:
+                    reason = f"{name}()"
+                current = Func(name=name, file=filepath, line=i+1, end=i+1,
+                               is_entry=is_entry, entry_reason=reason)
+        if current:
+            for cm in call_re.finditer(line):
+                cname = cm.group(1)
+                if cname not in _JS_SKIP:
+                    current.calls.add(cname)
+    if current:
+        current.end = len(lines)
+        funcs.append(current)
+    return funcs
+
+
 def build(paths: list[str]) -> dict[str, list[Func]]:
     """Collect all functions across the tree, indexed by bare name."""
     files = []
     for p in paths:
-        if os.path.isfile(p) and p.endswith(".py"):
-            files.append(p)
+        if os.path.isfile(p):
+            if p.endswith(".py") or os.path.splitext(p)[1] in _JS_EXTENSIONS:
+                files.append(p)
         elif os.path.isdir(p):
             for dp, dn, fn in os.walk(p):
                 dn[:] = [d for d in dn if d not in SKIP_DIRS]
-                files += [os.path.join(dp, n) for n in fn if n.endswith(".py")]
+                for n in fn:
+                    if n.endswith(".py") or os.path.splitext(n)[1] in _JS_EXTENSIONS:
+                        files.append(os.path.join(dp, n))
     by_name: dict[str, list[Func]] = {}
     for fp in files:
         try:
             with open(fp, encoding="utf-8", errors="replace") as fh:
-                tree = ast.parse(fh.read(), filename=fp)
-        except (OSError, SyntaxError):
+                source = fh.read()
+        except OSError:
             continue
-        c = _Collector(fp)
-        c.visit(tree)
-        for f in c.funcs:
-            by_name.setdefault(f.name, []).append(f)
+        if fp.endswith(".py"):
+            try:
+                tree = ast.parse(source, filename=fp)
+            except SyntaxError:
+                continue
+            c = _Collector(fp)
+            c.visit(tree)
+            for f in c.funcs:
+                by_name.setdefault(f.name, []).append(f)
+        elif os.path.splitext(fp)[1] in _JS_EXTENSIONS:
+            for f in _collect_js(fp, source):
+                by_name.setdefault(f.name, []).append(f)
     return by_name
 
 

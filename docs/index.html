@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attestor &mdash; Static Analysis Security Scanner</title>
+<meta name="description" content="Static analysis that chains findings into attack paths. Zero external dependencies. Pure Python. 15+ scan engines, 357 tests, kill chain synthesis.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0b1120;
+  --surface: #111b2e;
+  --surface-2: #162033;
+  --accent: #22d3a7;
+  --accent-dim: rgba(34, 211, 167, 0.12);
+  --accent-glow: rgba(34, 211, 167, 0.25);
+  --text: #dfe6f0;
+  --text-secondary: #6b7a90;
+  --text-muted: #3d4d63;
+  --red: #ef4444;
+  --amber: #f59e0b;
+  --blue: #3b82f6;
+  --border: rgba(255,255,255,0.06);
+  --mono: 'Space Mono', 'Consolas', monospace;
+  --sans: 'Manrope', system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f0f2f7;
+    --surface: #ffffff;
+    --surface-2: #f7f8fc;
+    --accent: #0fa883;
+    --accent-dim: rgba(15, 168, 131, 0.08);
+    --accent-glow: rgba(15, 168, 131, 0.15);
+    --text: #1a2332;
+    --text-secondary: #5a6577;
+    --text-muted: #b0b8c8;
+    --red: #dc2626;
+    --amber: #d97706;
+    --blue: #2563eb;
+    --border: rgba(0,0,0,0.08);
+  }
+}
+
+:root[data-theme="light"] {
+  --bg: #f0f2f7;
+  --surface: #ffffff;
+  --surface-2: #f7f8fc;
+  --accent: #0fa883;
+  --accent-dim: rgba(15, 168, 131, 0.08);
+  --accent-glow: rgba(15, 168, 131, 0.15);
+  --text: #1a2332;
+  --text-secondary: #5a6577;
+  --text-muted: #b0b8c8;
+  --red: #dc2626;
+  --amber: #d97706;
+  --blue: #2563eb;
+  --border: rgba(0,0,0,0.08);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.hero {
+  padding: 80px 0 40px;
+}
+
+.version-badge {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  padding: 4px 12px;
+  margin-bottom: 24px;
+}
+
+.hero h1 {
+  font-family: var(--sans);
+  font-weight: 800;
+  font-size: clamp(36px, 6vw, 56px);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin-bottom: 16px;
+}
+
+.hero h1 .accent { color: var(--accent); }
+
+.hero .tagline {
+  font-size: 18px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  max-width: 520px;
+  margin-bottom: 36px;
+}
+
+.terminal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  margin-bottom: 48px;
+  position: relative;
+}
+
+.terminal::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-glow), transparent);
+}
+
+.terminal-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: rgba(0,0,0,0.2);
+  border-bottom: 1px solid var(--border);
+}
+
+.terminal-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.terminal-dot:nth-child(1) { background: var(--red); opacity: 0.7; }
+.terminal-dot:nth-child(2) { background: var(--amber); opacity: 0.7; }
+.terminal-dot:nth-child(3) { background: var(--accent); opacity: 0.7; }
+
+.terminal-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 8px;
+}
+
+.terminal pre {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 20px 24px;
+  overflow-x: auto;
+  color: var(--accent);
+}
+
+.terminal pre .dim { color: var(--text-muted); }
+.terminal pre .sev-crit { color: var(--red); font-weight: 700; }
+.terminal pre .sev-high { color: var(--red); }
+.terminal pre .txt { color: var(--text-secondary); }
+.terminal pre .white { color: var(--text); }
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  margin-bottom: 64px;
+}
+
+.stat {
+  background: var(--surface);
+  padding: 24px;
+  text-align: center;
+}
+
+.stat-number {
+  font-family: var(--mono);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.section-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+
+.section-title {
+  font-weight: 700;
+  font-size: 28px;
+  letter-spacing: -0.01em;
+  margin-bottom: 32px;
+}
+
+.features { margin-bottom: 72px; }
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.feature {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 24px;
+  transition: border-color 0.2s;
+}
+
+.feature:hover { border-color: var(--accent-glow); }
+
+.feature-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  display: inline-block;
+  margin-bottom: 12px;
+}
+
+.tag-offense { color: var(--red); background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); }
+.tag-defense { color: var(--accent); background: var(--accent-dim); border: 1px solid rgba(34,211,167,0.2); }
+.tag-analysis { color: var(--blue); background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.2); }
+.tag-fix { color: var(--amber); background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.2); }
+
+.feature h3 { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+.feature p { font-size: 14px; color: var(--text-secondary); line-height: 1.5; }
+.feature code {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  display: block;
+  margin-top: 10px;
+}
+
+.engines { margin-bottom: 72px; }
+
+.engine-list { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.engine-chip {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 6px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  transition: all 0.15s;
+  cursor: default;
+}
+
+.engine-chip:hover {
+  color: var(--accent);
+  border-color: var(--accent-glow);
+  background: var(--accent-dim);
+}
+
+.download { margin-bottom: 80px; }
+
+.install-methods {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.install-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 24px;
+}
+
+.install-card h3 { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+
+.install-card .desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+.cmd-block {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--accent);
+  position: relative;
+  overflow-x: auto;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.cmd-block:hover { border-color: var(--accent-glow); }
+.cmd-block .prompt { color: var(--text-muted); }
+
+.cmd-block .copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 4px 10px;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  transition: all 0.15s;
+}
+
+.cmd-block .copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+.cmd-block .copy-btn.copied { color: var(--accent); border-color: var(--accent); }
+
+.requirements {
+  margin-top: 24px;
+  padding: 16px 20px;
+  background: var(--accent-dim);
+  border-left: 2px solid var(--accent);
+}
+
+.requirements p { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+.requirements strong { color: var(--text); font-weight: 600; }
+
+.footer {
+  border-top: 1px solid var(--border);
+  padding: 32px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 40px;
+}
+
+.footer-left { font-family: var(--mono); font-size: 12px; color: var(--text-muted); }
+.footer-right { font-size: 13px; color: var(--text-secondary); }
+
+@media (max-width: 640px) {
+  .hero { padding: 48px 0 24px; }
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .install-methods { grid-template-columns: 1fr; }
+  .terminal pre { font-size: 10px; padding: 14px 16px; }
+  .stat { padding: 16px; }
+  .stat-number { font-size: 22px; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <section class="hero">
+    <div class="version-badge">v4.3 &mdash; corpus-benchmark</div>
+    <h1>Attestor<span class="accent">.</span></h1>
+    <p class="tagline">Static analysis that chains findings into attack paths. Zero external dependencies. Pure Python. The scanner that never sleeps.</p>
+  </section>
+
+  <div class="terminal">
+    <div class="terminal-bar">
+      <span class="terminal-dot"></span>
+      <span class="terminal-dot"></span>
+      <span class="terminal-dot"></span>
+      <span class="terminal-title">attestor killchain src/ --full</span>
+    </div>
+    <pre>
+<span class="dim">   _   _   _            _
+  / \ | |_| |_ ___  ___| |_ ___  _ __
+ / _ \| __| __/ _ \/ __| __/ _ \| '__|
+/ ___ \ |_| ||  __/\__ \ || (_) | |
+/_/  \_\__|\__\___||___/\__\___/|_|  v4.3</span>
+
+  <span class="white">Kill Chain Analysis</span>
+  <span class="dim">==============================================================</span>
+  <span class="txt">3 chain(s) synthesized | 2 multi-step | 1 critical</span>
+  <span class="txt">these chains show how individual findings combine into full compromise.</span>
+
+  <span class="sev-crit">[CRITICAL]!!!</span> <span class="white">Chain 1: SQL Injection &#8594; OS Command Injection</span>
+    <span class="txt">impact: full database access, remote code execution</span>
+    <span class="txt">tactics: initial_access -&gt; execution</span>
+    <span class="dim">&gt;&gt;&gt; [initial_access]</span> SQL Injection
+         <span class="txt">gains: db_read, db_write, auth_bypass</span>
+    <span class="dim">---&gt; [execution]</span> OS Command Injection
+         <span class="txt">gains: code_exec, file_read, file_write</span>
+    <span class="dim">    spans: app.py, utils.py</span>
+
+  <span class="sev-high">[HIGH]!!</span> <span class="white">Chain 2: Path Traversal &#8594; Credential Exposure</span>
+    <span class="txt">impact: arbitrary file read, credential compromise</span></pre>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-number">357</div>
+      <div class="stat-label">Tests passing</div>
+    </div>
+    <div class="stat">
+      <div class="stat-number">40+</div>
+      <div class="stat-label">Detection rules</div>
+    </div>
+    <div class="stat">
+      <div class="stat-number">0</div>
+      <div class="stat-label">External deps</div>
+    </div>
+    <div class="stat">
+      <div class="stat-number">15+</div>
+      <div class="stat-label">Scan engines</div>
+    </div>
+  </div>
+
+  <section class="features">
+    <div class="section-label">Capabilities</div>
+    <h2 class="section-title">What it does</h2>
+    <div class="feature-grid">
+      <div class="feature">
+        <span class="feature-tag tag-offense">Offense</span>
+        <h3>Kill Chain Synthesis</h3>
+        <p>Chains individual findings into multi-step attack scenarios with MITRE ATT&amp;CK mapping and severity escalation.</p>
+        <code>attestor killchain src/</code>
+      </div>
+      <div class="feature">
+        <span class="feature-tag tag-analysis">Analysis</span>
+        <h3>Inter-procedural Dataflow</h3>
+        <p>Traces taint across function boundaries, through call graphs, with full evidence chains. The findings single-file scanners miss.</p>
+        <code>attestor interproc src/</code>
+      </div>
+      <div class="feature">
+        <span class="feature-tag tag-fix">Repair</span>
+        <h3>AST-Aware Fix Engine</h3>
+        <p>Plans and applies security fixes with reasoning chains, confidence scoring, and verification via re-scan. Not regex search-and-replace.</p>
+        <code>attestor plan-fix src/ --apply</code>
+      </div>
+      <div class="feature">
+        <span class="feature-tag tag-defense">Defense</span>
+        <h3>IaC Security Scan</h3>
+        <p>Dockerfiles, Kubernetes manifests, Terraform, Compose, GitHub Actions. Catches privileged containers, hardcoded secrets, host networking.</p>
+        <code>attestor iac infra/</code>
+      </div>
+      <div class="feature">
+        <span class="feature-tag tag-analysis">Analysis</span>
+        <h3>Symbolic Path Feasibility</h3>
+        <p>Proves whether flagged paths are actually reachable. Prunes infeasible dead paths so you focus on what matters.</p>
+        <code>attestor sym-solve src/</code>
+      </div>
+      <div class="feature">
+        <span class="feature-tag tag-offense">Offense</span>
+        <h3>Metasploit Bridge</h3>
+        <p>Exports findings as a Metasploit resource script. Point, scan, exploit. Authorized pentesting only.</p>
+        <code>attestor msf . --rhosts target</code>
+      </div>
+    </div>
+  </section>
+
+  <section class="engines">
+    <div class="section-label">Engine roster</div>
+    <h2 class="section-title">Everything under one CLI</h2>
+    <div class="engine-list">
+      <span class="engine-chip">scan</span>
+      <span class="engine-chip">native</span>
+      <span class="engine-chip">secrets</span>
+      <span class="engine-chip">exploits</span>
+      <span class="engine-chip">dataflow</span>
+      <span class="engine-chip">interproc</span>
+      <span class="engine-chip">killchain</span>
+      <span class="engine-chip">iac</span>
+      <span class="engine-chip">js</span>
+      <span class="engine-chip">api-scan</span>
+      <span class="engine-chip">threat-model</span>
+      <span class="engine-chip">taint</span>
+      <span class="engine-chip">sca</span>
+      <span class="engine-chip">sym-solve</span>
+      <span class="engine-chip">abstract</span>
+      <span class="engine-chip">clones</span>
+      <span class="engine-chip">surface</span>
+      <span class="engine-chip">similarity</span>
+      <span class="engine-chip">binary</span>
+      <span class="engine-chip">sbom</span>
+      <span class="engine-chip">compliance</span>
+      <span class="engine-chip">plan-fix</span>
+      <span class="engine-chip">reachability</span>
+      <span class="engine-chip">confirm</span>
+      <span class="engine-chip">cicd</span>
+      <span class="engine-chip">supply-chain</span>
+      <span class="engine-chip">git-history</span>
+      <span class="engine-chip">taint-dsl</span>
+    </div>
+  </section>
+
+  <section class="download">
+    <div class="section-label">Get started</div>
+    <h2 class="section-title">Install Attestor</h2>
+    <div class="install-methods">
+      <div class="install-card">
+        <h3>pip install</h3>
+        <p class="desc">Install from PyPI (recommended)</p>
+        <div class="cmd-block" onclick="copyCmd(this, 'pip install attestor')">
+          <span class="prompt">$</span> pip install attestor
+          <button class="copy-btn">copy</button>
+        </div>
+      </div>
+      <div class="install-card">
+        <h3>From source</h3>
+        <p class="desc">Clone and install in development mode</p>
+        <div class="cmd-block" onclick="copyCmd(this, 'git clone https://github.com/mangeshgwagle/attestor.git &amp;&amp; cd attestor &amp;&amp; pip install -e .')">
+          <span class="prompt">$</span> git clone https://github.com/mangeshgwagle/attestor.git
+          <button class="copy-btn">copy</button>
+        </div>
+      </div>
+    </div>
+    <div class="requirements">
+      <p><strong>Python 3.10+</strong> &mdash; No external dependencies required. Attestor runs on the Python standard library alone. Just install and scan.</p>
+    </div>
+  </section>
+
+  <div class="footer">
+    <div class="footer-left">attestor v4.3</div>
+    <div class="footer-right">Built by Mangesh Wagle</div>
+  </div>
+
+</div>
+
+<script>
+function copyCmd(el, text) {
+  try {
+    navigator.clipboard.writeText(text);
+  } catch(e) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
+  var btn = el.querySelector('.copy-btn');
+  btn.textContent = 'copied';
+  btn.classList.add('copied');
+  setTimeout(function() {
+    btn.textContent = 'copy';
+    btn.classList.remove('copied');
+  }, 1500);
+}
+</script>
+</body>
+</html>

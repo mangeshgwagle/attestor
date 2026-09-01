@@ -140,7 +140,7 @@ class Council:
                 f"{_host}/api/generate", data=payload,
                 headers={"Content-Type": "application/json"})
             try:
-                with urllib.request.urlopen(req, timeout=120) as resp:
+                with urllib.request.urlopen(req, timeout=300) as resp:
                     result = json.loads(resp.read().decode())
                     return result.get("response", "")
             except Exception:

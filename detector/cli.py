@@ -180,6 +180,7 @@ def cmd_check(args):
     """The one-command experience: scan -> triage -> show what matters -> offer fix."""
     import triage
     import autofix
+    import memory as mem_mod
     if args.no_color:
         C.enabled = False
     _banner()
@@ -188,8 +189,17 @@ def cmd_check(args):
     print(f"\n  {C.paint('attestor check', 'bold', 'cyan')}  "
           f"{root}   effort={C.paint(effort, 'bold')}\n")
 
+    mem = mem_mod.Memory(root)
+    import time as _time
+    _t0 = int(_time.time() * 1000)
+
     triage.load_overrides()
     findings = _run_effort(root, effort)
+
+    pre_filter = len(findings)
+    findings = mem.filter_findings(findings)
+    mem_suppressed = pre_filter - len(findings)
+
     triaged = triage.triage_all(findings)
     counts = triage.counts(triaged)
 
@@ -231,6 +241,13 @@ def cmd_check(args):
         print(f"\n  {C.paint('->', 'green', 'bold')} "
               f"{autofixable} finding(s) can be auto-fixed: "
               f"{C.paint(f'attestor fix {root} --apply', 'bold', 'cyan')}")
+    if mem_suppressed:
+        print(f"  {C.paint(f'  {mem_suppressed} suppressed by memory (known FPs)', 'dim')}")
+
+    _elapsed = int(_time.time() * 1000) - _t0
+    mem.record_scan([t.finding for t in triaged], scan_type="check",
+                    paths=[root], duration_ms=_elapsed)
+
     if args.json:
         print(json.dumps(triage.to_dict(triaged), indent=2))
     return min(sev_counts["CRITICAL"], 250)
@@ -1338,6 +1355,70 @@ def cmd_watch(args):
     return 0
 
 
+def cmd_memory(args):
+    import memory as mem_mod
+    mem = mem_mod.Memory(getattr(args, "root", "."))
+    subcmd = getattr(args, "memory_command", None)
+
+    if subcmd == "show":
+        if args.json:
+            print(json.dumps(mem_mod.to_dict(mem), indent=2, default=str))
+        else:
+            print(mem.render())
+        return 0
+
+    if subcmd == "feedback":
+        finding = {
+            "path": args.file or "", "line": args.line or 0,
+            "rule_id": args.rule or "",
+        }
+        mem.feedback_finding(finding, args.verdict, reason=args.reason or "")
+        print(f"  Recorded {args.verdict} for {args.rule or 'finding'}"
+              f" at {args.file}:{args.line}")
+        return 0
+
+    if subcmd == "learn":
+        mem.learn_patterns([args.root])
+        patterns = mem.get_patterns()
+        fw = patterns.get("frameworks", [])
+        print(f"  Learned codebase patterns")
+        if fw:
+            print(f"  Frameworks: {', '.join(fw)}")
+        imports = list(patterns.get("top_imports", {}).keys())[:10]
+        if imports:
+            print(f"  Top imports: {', '.join(imports)}")
+        return 0
+
+    if subcmd == "stats":
+        stats = mem.get_stats()
+        if not stats:
+            print("  No scan history yet.")
+            return 0
+        print(f"  Total scans:    {stats.get('total_scans', 0)}")
+        print(f"  Total findings: {stats.get('total_findings', 0)}")
+        print(f"  Last scan:      {stats.get('last_scan', 'never')}")
+        hotspots = mem.get_hotspot_files(5)
+        if hotspots:
+            print(f"\n  Hotspot files:")
+            for path, count in hotspots:
+                print(f"    {count:3d} findings  {path}")
+        noisy = mem.get_noisy_rules()
+        if noisy:
+            print(f"\n  Rule precision:")
+            for r in noisy[:5]:
+                print(f"    {r['rule']:30s}  {r['precision']:.0%}  "
+                      f"({r['tp']}tp/{r['fp']}fp)")
+        return 0
+
+    if subcmd == "clear":
+        mem.clear()
+        print("  Memory cleared.")
+        return 0
+
+    print("  Usage: attestor memory {show|feedback|learn|stats|clear}")
+    return 0
+
+
 def cmd_version(_args):
     _banner()
     print(f"  Attestor {VERSION}")
@@ -1831,6 +1912,40 @@ def build_parser() -> argparse.ArgumentParser:
     p_sbom.add_argument("--project", default="attestor-project")
     p_sbom.add_argument("--json", action="store_true")
     p_sbom.set_defaults(func=cmd_sbom)
+
+    # --- memory ---
+    p_mem = sub.add_parser("memory", help="persistent memory (learns across scans)")
+    mem_sub = p_mem.add_subparsers(dest="memory_command")
+
+    p_mem_show = mem_sub.add_parser("show", help="show memory summary")
+    p_mem_show.add_argument("root", nargs="?", default=".")
+    p_mem_show.add_argument("--json", action="store_true")
+    p_mem_show.set_defaults(func=cmd_memory)
+
+    p_mem_fb = mem_sub.add_parser("feedback",
+                                  help="mark a finding as tp/fp")
+    p_mem_fb.add_argument("verdict", choices=["tp", "fp", "defer"])
+    p_mem_fb.add_argument("--file", required=True, help="file path")
+    p_mem_fb.add_argument("--line", type=int, required=True)
+    p_mem_fb.add_argument("--rule", help="rule ID")
+    p_mem_fb.add_argument("--reason", help="why this verdict")
+    p_mem_fb.add_argument("root", nargs="?", default=".")
+    p_mem_fb.set_defaults(func=cmd_memory)
+
+    p_mem_learn = mem_sub.add_parser("learn",
+                                     help="learn codebase patterns")
+    p_mem_learn.add_argument("root", nargs="?", default=".")
+    p_mem_learn.set_defaults(func=cmd_memory)
+
+    p_mem_stats = mem_sub.add_parser("stats", help="show scan statistics")
+    p_mem_stats.add_argument("root", nargs="?", default=".")
+    p_mem_stats.set_defaults(func=cmd_memory)
+
+    p_mem_clear = mem_sub.add_parser("clear", help="wipe all memory")
+    p_mem_clear.add_argument("root", nargs="?", default=".")
+    p_mem_clear.set_defaults(func=cmd_memory)
+
+    p_mem.set_defaults(func=cmd_memory)
 
     # --- version ---
     p_ver = sub.add_parser("version", help="show version and AI status")

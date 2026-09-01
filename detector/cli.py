@@ -1402,6 +1402,117 @@ def cmd_baseline(args):
     return 0
 
 
+def cmd_sales(args):
+    import sales_engine
+    _banner()
+    sa = sales_engine.SalesAnalyzer(args.data_dir)
+    subcmd = getattr(args, "sales_command", None)
+
+    if subcmd == "ingest":
+        for csv_path in args.files:
+            result = sa.ingest(csv_path, source=getattr(args, "source", ""))
+            status = result["status"]
+            if status == "imported":
+                print(f"  Imported {result['rows']} rows from {csv_path}")
+            elif status == "skipped":
+                print(f"  Skipped {csv_path} (already imported)")
+            else:
+                print(f"  Error: {result.get('reason', 'unknown')}")
+        return 0
+
+    if subcmd == "analyze":
+        report = sa.analyze(days=args.days)
+        if args.json:
+            print(json.dumps(sales_engine.to_dict(report), indent=2, default=str))
+        else:
+            print(sa.render(report))
+        return 0
+
+    if subcmd == "clear":
+        sa.clear()
+        print("  Sales data cleared.")
+        return 0
+
+    print("  Usage: attestor sales {ingest|analyze|clear}")
+    return 0
+
+
+def cmd_inventory(args):
+    import inventory_engine
+    _banner()
+    mon = inventory_engine.InventoryMonitor(args.data_dir)
+    subcmd = getattr(args, "inv_command", None)
+
+    if subcmd == "load":
+        result = mon.load_stock(args.file)
+        print(f"  Loaded {result['items']} items")
+        return 0
+
+    if subcmd == "check":
+        if args.stock:
+            mon.load_stock(args.stock)
+        if not mon._stock:
+            print("  No stock loaded. Use: attestor inventory load stock.csv")
+            return 1
+        if not mon._thresholds:
+            mon.set_default_threshold(
+                min_qty=args.min_qty, reorder_qty=args.reorder_qty)
+        alerts = mon.check_thresholds()
+        if args.json:
+            print(json.dumps(inventory_engine.alerts_to_dict(alerts), indent=2))
+        else:
+            print(mon.render_alerts(alerts))
+        if args.slack and alerts:
+            ok = mon.send_slack_alert(args.slack, alerts)
+            print(f"  Slack: {'sent' if ok else 'failed'}")
+        if args.po and alerts:
+            po = mon.generate_po(alerts, vendor=args.vendor or "")
+            if po:
+                print(f"  PO draft: {po.po_number} (${po.total:,.2f})")
+        return 0
+
+    if subcmd == "threshold":
+        mon.set_threshold(args.sku, min_qty=args.min_qty,
+                          reorder_qty=args.reorder_qty)
+        print(f"  Threshold set for {args.sku}: min={args.min_qty}, "
+              f"reorder={args.reorder_qty}")
+        return 0
+
+    print("  Usage: attestor inventory {load|check|threshold}")
+    return 0
+
+
+def cmd_schedule(args):
+    import scheduler_engine
+    _banner()
+    s = scheduler_engine.Scheduler()
+    subcmd = getattr(args, "sched_command", None)
+
+    if subcmd == "solve":
+        if args.employees:
+            s.load_employees_csv(args.employees)
+        if args.shifts:
+            s.load_shifts_csv(args.shifts)
+        if args.labour_cap:
+            s.set_labour_cap(args.labour_cap)
+        schedule = s.solve(week_start=args.week or "")
+        if args.json:
+            print(json.dumps(scheduler_engine.to_dict(schedule), indent=2))
+        elif args.gcal:
+            events = scheduler_engine.to_gcal_events(schedule)
+            out = args.output or "schedule_events.json"
+            with open(out, "w") as f:
+                json.dump(events, f, indent=2)
+            print(f"  {len(events)} events exported to {out}")
+            print(f"  Import via Google Calendar API or gcalcli")
+        else:
+            print(s.render(schedule))
+        return 0
+
+    print("  Usage: attestor schedule solve --employees staff.csv --shifts shifts.csv")
+    return 0
+
+
 def cmd_hooks(args):
     import git_hooks
     if args.hooks_command == "install":
@@ -2017,6 +2128,74 @@ def build_parser() -> argparse.ArgumentParser:
     p_sbom.add_argument("--project", default="attestor-project")
     p_sbom.add_argument("--json", action="store_true")
     p_sbom.set_defaults(func=cmd_sbom)
+
+    # --- sales ---
+    p_sales = sub.add_parser("sales", help="sales data analysis (ingest, trend, forecast)")
+    sales_sub = p_sales.add_subparsers(dest="sales_command")
+
+    p_sales_in = sales_sub.add_parser("ingest", help="import CSV sales data")
+    p_sales_in.add_argument("files", nargs="+", help="CSV files to import")
+    p_sales_in.add_argument("--data-dir", default=".", help="data directory")
+    p_sales_in.add_argument("--source", help="data source label")
+    p_sales_in.set_defaults(func=cmd_sales)
+
+    p_sales_an = sales_sub.add_parser("analyze", help="analyze sales trends")
+    p_sales_an.add_argument("--data-dir", default=".", help="data directory")
+    p_sales_an.add_argument("--days", type=int, default=90)
+    p_sales_an.add_argument("--json", action="store_true")
+    p_sales_an.set_defaults(func=cmd_sales)
+
+    p_sales_cl = sales_sub.add_parser("clear", help="clear all sales data")
+    p_sales_cl.add_argument("--data-dir", default=".")
+    p_sales_cl.set_defaults(func=cmd_sales)
+    p_sales.set_defaults(func=cmd_sales)
+
+    # --- inventory ---
+    p_inv = sub.add_parser("inventory", help="inventory monitoring and alerts")
+    inv_sub = p_inv.add_subparsers(dest="inv_command")
+
+    p_inv_load = inv_sub.add_parser("load", help="load stock CSV")
+    p_inv_load.add_argument("file", help="stock CSV file")
+    p_inv_load.add_argument("--data-dir", default=".")
+    p_inv_load.set_defaults(func=cmd_inventory)
+
+    p_inv_check = inv_sub.add_parser("check", help="check thresholds and alert")
+    p_inv_check.add_argument("--data-dir", default=".")
+    p_inv_check.add_argument("--stock", help="stock CSV to load first")
+    p_inv_check.add_argument("--min-qty", type=int, default=10)
+    p_inv_check.add_argument("--reorder-qty", type=int, default=50)
+    p_inv_check.add_argument("--slack", help="Slack webhook URL for alerts")
+    p_inv_check.add_argument("--po", action="store_true", help="generate PO draft")
+    p_inv_check.add_argument("--vendor", help="vendor name for PO")
+    p_inv_check.add_argument("--json", action="store_true")
+    p_inv_check.set_defaults(func=cmd_inventory)
+
+    p_inv_th = inv_sub.add_parser("threshold", help="set item threshold")
+    p_inv_th.add_argument("sku", help="SKU to set threshold for")
+    p_inv_th.add_argument("--min-qty", type=int, required=True)
+    p_inv_th.add_argument("--reorder-qty", type=int, required=True)
+    p_inv_th.add_argument("--data-dir", default=".")
+    p_inv_th.set_defaults(func=cmd_inventory)
+    p_inv.set_defaults(func=cmd_inventory)
+
+    # --- schedule ---
+    p_sched = sub.add_parser("schedule", help="employee shift scheduling")
+    sched_sub = p_sched.add_subparsers(dest="sched_command")
+
+    p_sched_solve = sched_sub.add_parser("solve", help="generate schedule")
+    p_sched_solve.add_argument("--employees", required=True,
+                               help="employees CSV")
+    p_sched_solve.add_argument("--shifts", required=True,
+                               help="shifts CSV")
+    p_sched_solve.add_argument("--week", help="week start date (YYYY-MM-DD)")
+    p_sched_solve.add_argument("--labour-cap", type=float,
+                               help="weekly labour cost cap")
+    p_sched_solve.add_argument("--gcal", action="store_true",
+                               help="export Google Calendar events JSON")
+    p_sched_solve.add_argument("--output", "-o", help="output file for --gcal")
+    p_sched_solve.add_argument("--json", action="store_true")
+    p_sched_solve.set_defaults(func=cmd_schedule)
+    p_sched.set_defaults(func=cmd_schedule)
 
     # --- memory ---
     p_mem = sub.add_parser("memory", help="persistent memory (learns across scans)")

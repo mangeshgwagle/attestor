@@ -862,6 +862,18 @@ def cmd_bench(args):
     return 0
 
 
+def cmd_swe_bench(args):
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "bench"))
+    import swe_bench
+    _banner()
+    swe_bench.run_benchmark(
+        limit=args.limit,
+        filter_mode=args.filter,
+        use_council=args.council,
+        output_json=args.json)
+    return 0
+
+
 def cmd_evaluate(args):
     import evaluate
     _banner()
@@ -1657,6 +1669,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_bench = sub.add_parser("bench", help="benchmark dataflow engine vs legacy/Bandit")
     p_bench.add_argument("--json", action="store_true")
     p_bench.set_defaults(func=cmd_bench)
+
+    p_swebench = sub.add_parser("swe-bench",
+                                help="benchmark on SWE-bench Verified",
+                                aliases=["swebench"])
+    p_swebench.add_argument("--limit", type=int, default=50,
+                            help="max instances (default: 50)")
+    p_swebench.add_argument("--filter", choices=["all", "security", "python"],
+                            default="python")
+    p_swebench.add_argument("--council", action="store_true",
+                            help="also run model council on findings")
+    p_swebench.add_argument("--json", action="store_true")
+    p_swebench.set_defaults(func=cmd_swe_bench)
 
     # --- evaluate (precision/recall/F1 + noise reduction) ---
     p_eval = sub.add_parser("evaluate", help="measure precision/recall/F1 + FP reduction",

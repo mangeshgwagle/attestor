@@ -70,6 +70,7 @@ DATA_SOURCES = [
     ("swebench_training_data.jsonl", "swebench"),
     ("tool_use_training.jsonl", "tool_use"),
     ("pentagi_training_data.jsonl", "pentagi"),
+    ("feedback_training_data.jsonl", "feedback"),
 ]
 
 TARGET_MODULES = [

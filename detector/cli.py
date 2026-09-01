@@ -40,6 +40,13 @@
     attestor api-scan spec.json      # OpenAPI/Swagger security scan
     attestor threat-model .          # auto-STRIDE threat model
     attestor sbom . --format spdx    # SBOM generation (CycloneDX/SPDX)
+    attestor hybrid .                # static + model hybrid analysis
+    attestor hybrid . --effort max   # deep hybrid with all scanners
+    attestor memory show             # show memory (learned from past scans)
+    attestor memory feedback tp --file f --line n  # mark finding as TP/FP
+    attestor memory learn            # learn codebase patterns
+    attestor retrain                 # retrain owen-coder from feedback
+    attestor retrain --colab         # export Colab notebook for GPU training
     attestor control policy          # show Owner Control policy
     attestor version                 # version info
 """
@@ -55,7 +62,7 @@ _DETECTOR = Path(__file__).resolve().parent
 if os.fspath(_DETECTOR) not in sys.path:
     sys.path.insert(0, os.fspath(_DETECTOR))
 
-VERSION = "4.3"
+VERSION = "4.4"
 BANNER = r"""
    _   _   _            _
   / \ | |_| |_ ___  ___| |_ ___  _ __
@@ -405,6 +412,78 @@ def _check_ai_soft():
     if not ai_engine.is_available():
         print("Ollama is not running.", file=sys.stderr)
         sys.exit(2)
+
+
+def cmd_hybrid(args):
+    """Hybrid analysis: static engines + owen-coder model judgment."""
+    import hybrid_engine
+    if getattr(args, "no_color", False):
+        C.enabled = False
+    _banner()
+    _check_ai()
+    root = args.root
+    effort = getattr(args, "effort", "high")
+    print(f"\n  {C.paint('attestor hybrid', 'bold', 'cyan')}  "
+          f"{root}   effort={C.paint(effort, 'bold')}\n")
+
+    analyzer = hybrid_engine.HybridAnalyzer(
+        root, model=getattr(args, "model", None))
+    results = analyzer.analyze(effort=effort,
+                               batch=not getattr(args, "no_batch", False))
+
+    if not results:
+        print("  No findings.")
+        return 0
+
+    if args.json:
+        print(json.dumps(hybrid_engine.to_dict(results), indent=2, default=str))
+    else:
+        print(hybrid_engine.render_results(results))
+
+    exploitable = sum(1 for r in results if r.verdict == "EXPLOITABLE")
+    return min(exploitable, 250)
+
+
+def cmd_retrain(args):
+    """Generate feedback training data and optionally retrain."""
+    _banner()
+    import subprocess
+    training_dir = str(Path(__file__).resolve().parent.parent / "training")
+
+    projects = args.projects or ["."]
+    print(f"\n  {C.paint('attestor retrain', 'bold', 'cyan')}\n")
+
+    print("  Step 1: Extract feedback from memory...")
+    fb_script = os.path.join(training_dir, "feedback_to_training.py")
+    subprocess.run(
+        [sys.executable, fb_script] + projects,
+        cwd=training_dir)
+
+    print("\n  Step 2: Merge all training data...")
+    merge_script = os.path.join(training_dir, "merge_training_data.py")
+    subprocess.run([sys.executable, merge_script], cwd=training_dir)
+
+    if getattr(args, "colab", False):
+        print("\n  Step 3: Export Colab notebook...")
+        colab_script = os.path.join(training_dir, "export_colab.py")
+        model_size = getattr(args, "model", "14b")
+        subprocess.run(
+            [sys.executable, colab_script, "--model", model_size],
+            cwd=training_dir)
+        print(f"\n  Upload the .ipynb to Colab and run all cells.")
+    elif getattr(args, "train", False):
+        print("\n  Step 3: Training locally...")
+        train_script = os.path.join(training_dir, "train_attestor.py")
+        model_size = getattr(args, "model", "3b")
+        subprocess.run(
+            [sys.executable, train_script, "--model", model_size, "--skip-fetch"],
+            cwd=training_dir)
+    else:
+        print("\n  Data ready. Next steps:")
+        print(f"    Train locally:  attestor retrain --train --model 3b")
+        print(f"    Train on Colab: attestor retrain --colab --model 14b")
+
+    return 0
 
 
 def cmd_control(args):
@@ -1432,7 +1511,7 @@ def cmd_version(_args):
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="attestor",
-        description="Attestor 4.3 -- the scanner that never sleeps",
+        description="Attestor 4.4 -- for AI's, by AI",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -1745,6 +1824,32 @@ def build_parser() -> argparse.ArgumentParser:
                            help="run models sequentially (default: parallel)")
     p_council.add_argument("--json", action="store_true")
     p_council.set_defaults(func=cmd_council)
+
+    # --- hybrid (static + model judgment) ---
+    p_hybrid = sub.add_parser("hybrid",
+                              help="hybrid analysis: static engines + owen-coder judgment",
+                              aliases=["judge"])
+    p_hybrid.add_argument("root", nargs="?", default=".")
+    p_hybrid.add_argument("--effort", "-e", choices=EFFORT_LEVELS, default="high")
+    p_hybrid.add_argument("--model", help="override model (default: auto-select)")
+    p_hybrid.add_argument("--no-batch", action="store_true",
+                          help="judge findings one at a time (slower, more detailed)")
+    p_hybrid.add_argument("--no-color", action="store_true")
+    p_hybrid.add_argument("--json", action="store_true")
+    p_hybrid.set_defaults(func=cmd_hybrid)
+
+    # --- retrain (feedback loop) ---
+    p_retrain = sub.add_parser("retrain",
+                               help="retrain owen-coder from scan feedback",
+                               aliases=["learn"])
+    p_retrain.add_argument("projects", nargs="*",
+                           help="project dirs to extract feedback from (default: .)")
+    p_retrain.add_argument("--colab", action="store_true",
+                           help="export Colab notebook for GPU training")
+    p_retrain.add_argument("--train", action="store_true",
+                           help="train locally (requires GPU)")
+    p_retrain.add_argument("--model", choices=["3b", "14b"], default="14b")
+    p_retrain.set_defaults(func=cmd_retrain)
 
     # --- bench (dataflow engine vs baselines) ---
     p_bench = sub.add_parser("bench", help="benchmark dataflow engine vs legacy/Bandit")

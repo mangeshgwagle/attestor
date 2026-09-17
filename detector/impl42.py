@@ -15,7 +15,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, __file__.rsplit("\\", 1)[0] if "\\" in __file__ else ".")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 REPOS = Path(__file__).resolve().parent.parent / "repos"
 

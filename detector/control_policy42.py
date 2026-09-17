@@ -18,7 +18,7 @@ from typing import Any, Mapping
 import variant414
 
 
-VERSION = "4.2"
+VERSION = "4.3"
 POLICY_SCHEMA = "attestor-owner-control-policy/4.2"
 PLAN_SCHEMA = "attestor-owner-control-plan/4.2"
 PROFILE_SLUG = "cockroach-janta-party"
@@ -69,6 +69,7 @@ SESSION_RE = re.compile(r"[0-9a-f]{32}", re.ASCII)
 OPERATION_ID_RE = re.compile(r"[a-z][a-z0-9-]{0,63}", re.ASCII)
 EXTENSION_RE = re.compile(r"\.[A-Za-z0-9_+.-]{1,31}", re.ASCII)
 
+PROTECTED_DIRECTORY_NAMES = frozenset({
     "$recycle.bin",
     ".aws",
     ".azure",
@@ -107,6 +108,7 @@ EXTENSION_RE = re.compile(r"\.[A-Za-z0-9_+.-]{1,31}", re.ASCII)
     "windows",
 })
 
+SENSITIVE_FILE_NAMES = frozenset({
     ".env",
     ".git-credentials",
     ".netrc",
@@ -132,6 +134,8 @@ EXTENSION_RE = re.compile(r"\.[A-Za-z0-9_+.-]{1,31}", re.ASCII)
     "tokens.json",
     "wallet.dat",
 })
+
+SENSITIVE_FILE_SUFFIXES = frozenset({
     ".env", ".jks", ".key", ".keystore", ".p12", ".pem", ".pfx",
     ".pkcs12",
 })
@@ -306,21 +310,25 @@ def _root_text(value: Any) -> str:
         for part in PurePath(value).parts
         if part not in {"", "/", "\\"}
     }
-    # protected-directory rejection removed at operator request
+    protected = components & PROTECTED_DIRECTORY_NAMES
+    if protected:
+        raise ControlPolicyError(
+            "control root contains protected directory: %s"
+            % ", ".join(sorted(protected)))
     return value
 
 
 def is_sensitive_file_name(name: str) -> bool:
     lowered = name.casefold()
     return (
-        lowered in frozenset()
-        or any(lowered.endswith(suffix) for suffix in frozenset())
+        lowered in SENSITIVE_FILE_NAMES
+        or any(lowered.endswith(suffix) for suffix in SENSITIVE_FILE_SUFFIXES)
         or (lowered.startswith(".env.") and lowered != ".env.example")
     )
 
 
 def is_protected_directory_name(name: str) -> bool:
-    return name.casefold().rstrip(" .") in frozenset()
+    return name.casefold().rstrip(" .") in PROTECTED_DIRECTORY_NAMES
 
 
 def _root_list(value: Any, *, allow_empty: bool) -> list[str]:
@@ -500,9 +508,9 @@ _POLICY_BODY = {
         "max_text_bytes": MAX_TEXT_BYTES,
         "max_total_hash_bytes": MAX_TOTAL_HASH_BYTES,
     },
-    "protected_directory_names": sorted(frozenset()),
-    "sensitive_file_names": sorted(frozenset()),
-    "sensitive_file_suffixes": sorted(frozenset()),
+    "protected_directory_names": sorted(PROTECTED_DIRECTORY_NAMES),
+    "sensitive_file_names": sorted(SENSITIVE_FILE_NAMES),
+    "sensitive_file_suffixes": sorted(SENSITIVE_FILE_SUFFIXES),
     "safety_controls": dict(SAFETY_CONTROLS),
 }
 POLICY_SHA256 = digest_json(_POLICY_BODY)

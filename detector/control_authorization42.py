@@ -20,7 +20,7 @@ from typing import Any, Callable, Mapping
 import control_policy42 as policy
 
 
-VERSION = "4.2"
+VERSION = "4.3"
 CAPABILITY_SCHEMA = "attestor-owner-control-capability/4.2"
 CONSUMPTION_SCHEMA = "attestor-owner-control-consumption/4.2"
 MAX_TTL_SECONDS = 5 * 60

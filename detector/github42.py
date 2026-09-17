@@ -22,7 +22,7 @@ from pathlib import Path
 
 REPOS_DIR = Path(__file__).resolve().parent.parent / "repos"
 
-sys.path.insert(0, __file__.rsplit("\\", 1)[0] if "\\" in __file__ else ".")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 GH_SCHEMA = "attestor-github-4.2"
 EXIT_CLEAN = 0
@@ -81,7 +81,7 @@ def apply_patch(repo_dir, diff_text):
 
 def review_repo(repo_dir):
     """Run Owen's full review stack on a checked-out repo."""
-    sys.path.insert(0, __file__.rsplit("\\", 1)[0] if "\\" in __file__ else ".")
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
 
     findings = {"reader": None, "hardening": [], "total": 0}
 

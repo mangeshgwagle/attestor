@@ -48,7 +48,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Sequence
 
 SCHEMA = "attestor.house-profile/1.0"
-VERSION = "4.2"
+VERSION = "4.3"
 
 MANDATORY, ADVISORY, WAIVED = "mandatory", "advisory", "waived"
 DEFAULT_UNLISTED = ADVISORY

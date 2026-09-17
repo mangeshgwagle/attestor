@@ -1565,6 +1565,8 @@ def main(argv=None) -> int:
                     help="4.1.4 CLI variant alias (default: south-park)")
     ap.add_argument("--computer-scan", action="store_true",
                     help="discover and analyze local projects without a path; permission is denied unless explicitly authorized")
+    ap.add_argument("--authorize-computer-scan", "-computer-scan",
+                    dest="authorize_computer_scan", action="store_true",
                     help="grant read-only local discovery and analysis permission for this run only")
     ap.add_argument("--computer-scope", choices=("home", "fixed-drives"),
                     default="home",

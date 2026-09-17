@@ -91,7 +91,7 @@ def minimize(crash_input, fn, allowed, passes_cap=20):
 
 
 def run_fuzz(fn, iterations, seconds, seed=0, corpus=(),
-             allowed=(KeyboardInterrupt, SystemExit)):
+             allowed=(SystemExit,)):
     deadline = time.monotonic() + seconds if seconds else None
     rng = random.Random(seed)
     crashes = []
@@ -151,9 +151,14 @@ def main(argv=None):
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--corpus")
     parser.add_argument("--format", choices=["text", "json"], default="json")
+    parser.add_argument("--authorize-local-execution", action="store_true",
+                        help="required flag acknowledging that fuzzing executes "
+                             "caller-provided code")
     args = parser.parse_args(argv)
 
+    if not args.authorize_local_execution:
         print("offensive_fuzz42: gated; fuzzing executes caller-provided code "
+              "(pass --authorize-local-execution)",
               file=sys.stderr)
         return 3
 

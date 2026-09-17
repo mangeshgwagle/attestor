@@ -58,7 +58,7 @@ def load_rules(path):
             "name": rule.get("name", "rule"),
             "field": rule.get("field", "body"),      # header|body|url|any
             "header": (rule.get("header") or "").lower(),
-            "pattern": re.compile(str(rule.get("match", ""))) ,
+            "pattern": re.compile(str(rule.get("match", ""))[:4096]),
             "replace": str(rule.get("replace", "")),
         })
     return compiled
@@ -81,7 +81,8 @@ def apply_rules(rules, url, headers, body):
                 new_url = sub(new_url)
             if field in ("body", "any"):
                 new_body = sub(new_body.decode("latin-1",
-                                               errors="replace")).encode()
+                                               errors="replace")).encode("latin-1",
+                                                                         errors="replace")
             if field in ("header", "any"):
                 for name in list(new_headers.keys()):
                     if rule["header"] and name.lower() != rule["header"]:
@@ -103,13 +104,14 @@ def swap_credentials(headers, replacement_headers):
     return out
 
 
-def make_proxy(upstream, rules, ledger_path, autorize=None):
+def make_proxy(upstream, rules, ledger_path, autorize=None, port=0):
     """autorize: {'a': {'headers': {...}}, 'b': {'headers': {...}}}"""
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.0"
 
         def _relay(self, include_body):
-            length = int(self.headers.get("Content-Length", 0) or 0)
+            length = max(0, min(int(self.headers.get("Content-Length", 0) or 0),
+                                1 << 20))
             body = self.rfile.read(length) if include_body else b""
             url = upstream.rstrip("/") + self.path
             headers = {k: v for k, v in self.headers.items()}
@@ -131,6 +133,10 @@ def make_proxy(upstream, rules, ledger_path, autorize=None):
                 payload = exc.read(1 << 20)
                 status = exc.code
                 resp_headers = dict(exc.headers)
+            except (urllib.error.URLError, OSError) as exc:
+                payload = ("upstream error: %s" % exc).encode()
+                status = 502
+                resp_headers = {}
 
             entry = {
                 "method": self.command,
@@ -189,6 +195,12 @@ def make_proxy(upstream, rules, ledger_path, autorize=None):
                     handle.write(json.dumps(entry) + "\n")
 
             self.send_response(status)
+            for hdr_name, hdr_val in resp_headers.items():
+                if hdr_name.lower() in ("transfer-encoding",
+                                         "connection",
+                                         "content-length"):
+                    continue
+                self.send_header(hdr_name, hdr_val)
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
@@ -208,7 +220,7 @@ def make_proxy(upstream, rules, ledger_path, autorize=None):
         def log_message(self, *_args):
             pass
 
-    return HTTPServer(("127.0.0.1", 0), Handler)
+    return HTTPServer(("127.0.0.1", port), Handler)
 
 
 def run_selftest():
@@ -302,11 +314,10 @@ def main(argv=None):
             autorize = json.load(handle)
 
     server = make_proxy(args.upstream, rules, args.ledger,
-                        autorize=autorize)
+                        autorize=autorize, port=args.port)
     actual_port = server.server_address[1]
-    bound = args.port if args.port in (0, None) else None
     print(json.dumps({"listening": "127.0.0.1:%d" % actual_port,
-                      "requested_port": bound or args.port,
+                      "requested_port": args.port,
                       "schema": PX_SCHEMA}))
     try:
         server.serve_forever()

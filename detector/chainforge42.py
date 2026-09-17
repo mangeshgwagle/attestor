@@ -238,8 +238,8 @@ def centrality(graph, alpha_scaled=ALPHA_SCALED):
             for i in range(size):
                 if row[i]:
                     acc += x[i] * row[i]
-            value = (alpha_scaled * acc // SCALE
-                     + one_minus_alpha * s_scaled[j] // SCALE)
+            value = (alpha_scaled * acc
+                     + one_minus_alpha * s_scaled[j]) // SCALE
             new_x.append(value)
         residual = max(abs(new_x[i] - x[i]) for i in range(size))
         x = new_x
@@ -381,7 +381,18 @@ def kernel_check():
 
     executed = False
     compiler = shutil.which("g++") or shutil.which("clang++")
-    if checks["cpp_present"] and compiler:
+    cpp_integrity = None
+    if checks["cpp_present"]:
+        pin_path = cpp_path + ".sha256"
+        if os.path.exists(pin_path):
+            with open(cpp_path, "rb") as fh:
+                cpp_digest = hashlib.sha256(fh.read()).hexdigest()
+            with open(pin_path, "r", encoding="utf-8") as fh:
+                pinned = fh.read().strip().split()[0]
+            cpp_integrity = (cpp_digest == pinned)
+        else:
+            cpp_integrity = None
+    if checks["cpp_present"] and compiler and cpp_integrity is True:
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 binary = os.path.join(tmp, "kernel_selfcheck")
@@ -394,6 +405,13 @@ def kernel_check():
                     executed = run.returncode == 0
         except (OSError, subprocess.SubprocessError):
             executed = False
+    checks["cpp_integrity"] = {
+        "verified": cpp_integrity is True,
+        "pin_found": cpp_integrity is not None,
+        "note": ("kernel.cpp was SHA-256 verified against its pinned digest "
+                 "before compilation" if cpp_integrity is True else
+                 "compilation skipped: no integrity pin or digest mismatch"),
+    }
     checks["cpp_compile_and_run"] = {
         "executed": executed,
         "compiler_found": bool(compiler),

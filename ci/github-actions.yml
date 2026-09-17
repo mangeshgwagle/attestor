@@ -1,0 +1,62 @@
+name: Attestor Security Scan
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  attestor-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Attestor
+        run: pip install -e ".[ai]" 2>/dev/null || pip install -e .
+
+      - name: Security Scan
+        run: |
+          python detector/cli.py check . --effort high --json > attestor-report.json
+
+      - name: Compliance Report (OWASP)
+        run: |
+          python detector/cli.py compliance . --framework owasp --json > compliance-owasp.json
+
+      - name: Compliance Report (PCI-DSS)
+        run: |
+          python detector/cli.py compliance . --framework pci-dss --json > compliance-pci.json
+
+      - name: SBOM
+        run: |
+          python detector/cli.py sbom . --format cyclonedx --json > sbom.json
+
+      - name: Gate on CRITICAL findings
+        run: |
+          python -c "
+          import json, sys
+          with open('attestor-report.json') as f:
+              data = json.load(f)
+          findings = data if isinstance(data, list) else data.get('findings', [])
+          crits = sum(1 for f in findings if isinstance(f, dict) and f.get('severity') == 'CRITICAL')
+          print(f'CRITICAL: {crits}')
+          sys.exit(1 if crits > 0 else 0)
+          "
+
+      - name: Upload Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: attestor-reports
+          path: |
+            attestor-report.json
+            compliance-*.json
+            sbom.json

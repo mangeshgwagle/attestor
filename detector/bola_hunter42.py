@@ -33,7 +33,7 @@ EXIT_INVALID = 2
 EXIT_OPERATIONAL = 4
 
 ID_PATTERNS = (
-    ("numeric-id", re.compile(r"\b(\d{1,10})\b")),
+    ("numeric-id", re.compile(r"(?<![:\d])(\d{2,10})(?![:\d])")),
     ("uuid", re.compile(r"\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-"
                         r"[0-9a-f]{4}-[0-9a-f]{12})\b", re.I)),
     ("email", re.compile(r"\b([\w.+-]+@[\w-]+\.[\w.]+)\b")),
@@ -141,13 +141,15 @@ def build_object_graph(entries, base_url, principal_headers, principal_name,
 
 
 def compare_responses(status_a, len_a, status_b, len_b):
-    if status_b in (401, 403, 302, 301):
+    if status_b in (401, 403):
         return "protected"
+    if status_b in (301, 302):
+        return "redirect-review"
     if status_b >= 500:
         return "error-on-cross-principal"
     if status_a == status_b and abs(len_b - len_a) <= LEN_TOLERANCE_ABS:
         return "same-content-wrong-principal"
-    if status_b == status_a:
+    if status_a == status_b:
         return "partial-divergence-review"
     return "divergent"
 

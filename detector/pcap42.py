@@ -103,7 +103,7 @@ def parse_frame(frame, linktype):
 def detect_cleartext_creds(records):
     hits = []
     for rec in records:
-        text = rec["payload"][:512].decode("latin-1", errors="replace")
+        text = rec["payload"][:8192].decode("latin-1", errors="replace")
         low = text.lower()
         marker = None
         if "password=" in low or "passwd=" in low or "pass=" in low:
@@ -139,6 +139,10 @@ def detect_dns_tunneling(records):
         try:
             while i < len(payload) and payload[i]:
                 length = payload[i]
+                if length >= 0xC0:
+                    break
+                if length == 0 or i + 1 + length > len(payload):
+                    break
                 label = payload[i + 1:i + 1 + length]
                 labels.append(label.decode("latin-1",
                                            errors="replace"))

@@ -1,0 +1,15 @@
+{
+  "id": "mangeshkwagle/notebook75dd5f98a0",
+  "title": "notebook75dd5f98a0",
+  "code_file": "kaggle_finetune.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "accelerator": "nvidiaTeslaT4x2",
+  "enable_internet": true,
+  "dataset_sources": ["mangeshkwagle/attestor-43-training-data"],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "docker_image_pinning_type": "latest"
+}

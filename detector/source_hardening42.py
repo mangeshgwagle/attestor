@@ -42,7 +42,7 @@ BIDI_CHARS = {
 
 BIDI_PATTERN = re.compile("[" + "".join(BIDI_CHARS) + "]")
 
-CYRILLIC_GREEK = re.compile(r"[\u0370-\u03ff\u0400-\u04ff]")
+CYRILLIC_GREEK = re.compile(r"[\u0370-\u03ff\u0400-\u052f\u1f00-\u1fff]")
 ASCII_LETTERS = re.compile(r"[A-Za-z]")
 
 SECRET_ASSIGNMENT = re.compile(

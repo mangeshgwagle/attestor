@@ -1,0 +1,611 @@
+{
+  "CVE-CVE-2017-5638": [
+    "CWE-94"
+  ],
+  "CVE-CVE-2019-0708": [
+    "CWE-416"
+  ],
+  "CVE-CVE-2019-11043": [
+    "CWE-787"
+  ],
+  "CVE-CVE-2020-1472": [
+    "CWE-330"
+  ],
+  "CVE-CVE-2021-3156": [
+    "CWE-787"
+  ],
+  "CVE-CVE-2021-42013": [
+    "CWE-22"
+  ],
+  "CVE-CVE-2021-44228": [
+    "CWE-917"
+  ],
+  "CVE-CVE-2022-0847": [
+    "CWE-281"
+  ],
+  "CVE-CVE-GENERIC-CMDI": [
+    "CWE-78"
+  ],
+  "CVE-CVE-GENERIC-DESER": [
+    "CWE-502"
+  ],
+  "CVE-CVE-GENERIC-HARDCODED-CREDS": [
+    "CWE-798"
+  ],
+  "CVE-CVE-GENERIC-PATHTRAVERSAL": [
+    "CWE-22"
+  ],
+  "CVE-CVE-GENERIC-SQLI": [
+    "CWE-89"
+  ],
+  "CVE-CVE-GENERIC-SSRF": [
+    "CWE-918"
+  ],
+  "CVE-CVE-GENERIC-XSS": [
+    "CWE-79"
+  ],
+  "JS-CMDI-EVAL-REQ": [
+    "CWE-78"
+  ],
+  "JS-CMDI-EXEC": [
+    "CWE-78"
+  ],
+  "JS-CMDI-SPAWN": [
+    "CWE-78"
+  ],
+  "JS-COOKIE-NOHTTP": [
+    "CWE-1004"
+  ],
+  "JS-CORS-ALL": [
+    "CWE-942"
+  ],
+  "JS-CRYPTO-DES": [
+    "CWE-327"
+  ],
+  "JS-CRYPTO-MD5": [
+    "CWE-328"
+  ],
+  "JS-CRYPTO-RAND": [
+    "CWE-330"
+  ],
+  "JS-CRYPTO-SHA1": [
+    "CWE-328"
+  ],
+  "JS-CSRF-DISABLED": [
+    "CWE-352"
+  ],
+  "JS-DESER-UNSAFE": [
+    "CWE-502"
+  ],
+  "JS-EVAL": [
+    "CWE-95"
+  ],
+  "JS-HELMET-MISSING": [
+    "CWE-693"
+  ],
+  "JS-INFO-CONSOLE": [
+    "CWE-532"
+  ],
+  "JS-INFO-STACKTRACE": [
+    "CWE-209"
+  ],
+  "JS-NEWFUNCTION": [
+    "CWE-95"
+  ],
+  "JS-PATH-DOTDOT": [
+    "CWE-22"
+  ],
+  "JS-PATH-JOIN": [
+    "CWE-22"
+  ],
+  "JS-PROTO-BRACKET": [
+    "CWE-1321"
+  ],
+  "JS-PROTO-CONSTRUCTOR": [
+    "CWE-1321"
+  ],
+  "JS-PROTO-MERGE": [
+    "CWE-1321"
+  ],
+  "JS-REDIR-LOC": [
+    "CWE-601"
+  ],
+  "JS-REDIR-RES": [
+    "CWE-601"
+  ],
+  "JS-REDOS-REPEAT": [
+    "CWE-1333"
+  ],
+  "JS-SETINTERVAL-STR": [
+    "CWE-95"
+  ],
+  "JS-SQLI-CONCAT": [
+    "CWE-89"
+  ],
+  "JS-SQLI-TEMPLATE": [
+    "CWE-89"
+  ],
+  "JS-SSRF-FETCH": [
+    "CWE-918"
+  ],
+  "JS-SSRF-HTTP": [
+    "CWE-918"
+  ],
+  "JS-VM-RUNIN": [
+    "CWE-95"
+  ],
+  "JS-XSS-DANGEROUSLY": [
+    "CWE-79"
+  ],
+  "JS-XSS-DOCWRITE": [
+    "CWE-79"
+  ],
+  "JS-XSS-DOMPARSER": [
+    "CWE-79"
+  ],
+  "JS-XSS-INNERHTML": [
+    "CWE-79"
+  ],
+  "JS-XSS-INSERTADJ": [
+    "CWE-79"
+  ],
+  "JS-XSS-JQHTML": [
+    "CWE-79"
+  ],
+  "JS-XSS-OUTERHTML": [
+    "CWE-79"
+  ],
+  "TAINT-code_injection": [
+    "CWE-95"
+  ],
+  "TAINT-command_injection": [
+    "CWE-78"
+  ],
+  "TAINT-deserialization": [
+    "CWE-502"
+  ],
+  "TAINT-email_injection": [
+    "CWE-93"
+  ],
+  "TAINT-log_injection": [
+    "CWE-117"
+  ],
+  "TAINT-open_redirect": [
+    "CWE-601"
+  ],
+  "TAINT-path_traversal": [
+    "CWE-22"
+  ],
+  "TAINT-sql_injection": [
+    "CWE-89"
+  ],
+  "TAINT-ssrf": [
+    "CWE-918"
+  ],
+  "TAINT-template_injection": [
+    "CWE-94"
+  ],
+  "TAINT-xss": [
+    "CWE-79"
+  ],
+  "TAINT-xxe": [
+    "CWE-611"
+  ],
+  "asm-legacy-int80": [
+    "CWE-197"
+  ],
+  "asm-writable-executable-section": [
+    "CWE-2119"
+  ],
+  "assign-in-condition": [
+    "CWE-481"
+  ],
+  "c-buffer-underwrite": [
+    "CWE-124"
+  ],
+  "c-command-injection": [
+    "CWE-78"
+  ],
+  "c-deref-after-null-check": [
+    "CWE-476"
+  ],
+  "c-divide-by-zero": [
+    "CWE-369"
+  ],
+  "c-double-free": [
+    "CWE-415"
+  ],
+  "c-free-not-on-heap": [
+    "CWE-590"
+  ],
+  "c-free-stack-address": [
+    "CWE-590"
+  ],
+  "c-heap-buffer-overflow": [
+    "CWE-122"
+  ],
+  "c-integer-overflow": [
+    "CWE-190"
+  ],
+  "c-malloc-strlen-no-nul": [
+    "CWE-787"
+  ],
+  "c-memcmp-padding": [
+    "CWE-188"
+  ],
+  "c-memory-leak": [
+    "CWE-401"
+  ],
+  "c-mismatched-free": [
+    "CWE-762"
+  ],
+  "c-null-check-after-deref": [
+    "CWE-476"
+  ],
+  "c-null-deref": [
+    "CWE-476"
+  ],
+  "c-null-guard-bitwise": [
+    "CWE-476"
+  ],
+  "c-numeric-truncation": [
+    "CWE-197"
+  ],
+  "c-partial-init": [
+    "CWE-457"
+  ],
+  "c-path-traversal": [
+    "CWE-23",
+    "CWE-36"
+  ],
+  "c-realloc-leak": [
+    "CWE-401"
+  ],
+  "c-return-local-address": [
+    "CWE-562"
+  ],
+  "c-signed-size": [
+    "CWE-194"
+  ],
+  "c-stack-buffer-overflow": [
+    "CWE-121"
+  ],
+  "c-strncpy-truncation": [
+    "CWE-170"
+  ],
+  "c-struct-member-overrun": [
+    "CWE-787"
+  ],
+  "c-unchecked-return": [
+    "CWE-252"
+  ],
+  "c-uninitialised-read": [
+    "CWE-457"
+  ],
+  "c-use-after-free": [
+    "CWE-416"
+  ],
+  "c-wrong-return-check": [
+    "CWE-253"
+  ],
+  "command-exec": [
+    "CWE-78"
+  ],
+  "cpp-delete-array-mismatch": [
+    "CWE-762"
+  ],
+  "cpp-return-cstr-local": [
+    "CWE-562"
+  ],
+  "cpp-use-after-move": [
+    "CWE-672"
+  ],
+  "cs-cert-validation-disabled": [
+    "CWE-295"
+  ],
+  "cs-command-injection": [
+    "CWE-78"
+  ],
+  "cs-sql-injection": [
+    "CWE-89"
+  ],
+  "cs-weak-hash": [
+    "CWE-327"
+  ],
+  "cs-weak-random": [
+    "CWE-338"
+  ],
+  "cs-xxe": [
+    "CWE-611"
+  ],
+  "dangerous-eval": [
+    "CWE-94"
+  ],
+  "debug-enabled": [
+    "CWE-489"
+  ],
+  "empty-catch": [
+    "CWE-390"
+  ],
+  "float-equality": [
+    "CWE-1077"
+  ],
+  "format-string": [
+    "CWE-134"
+  ],
+  "go-command-injection": [
+    "CWE-78"
+  ],
+  "go-http-no-timeout": [
+    "CWE-1088"
+  ],
+  "hardcoded-secret": [
+    "CWE-798"
+  ],
+  "hlasm-authorized-mode": [
+    "CWE-250"
+  ],
+  "hlasm-execute-variable-length": [
+    "CWE-120"
+  ],
+  "hlasm-storage-key-change": [
+    "CWE-250"
+  ],
+  "hs-int-overflow": [
+    "CWE-190"
+  ],
+  "insecure-http-url": [
+    "CWE-319"
+  ],
+  "java-array-index-unchecked": [
+    "CWE-129"
+  ],
+  "java-broken-cipher": [
+    "CWE-327"
+  ],
+  "java-command-injection": [
+    "CWE-78"
+  ],
+  "java-divide-by-zero": [
+    "CWE-369"
+  ],
+  "java-explicit-finalize": [
+    "CWE-586"
+  ],
+  "java-external-config": [
+    "CWE-15"
+  ],
+  "java-fixed-seed": [
+    "CWE-336"
+  ],
+  "java-format-string": [
+    "CWE-134"
+  ],
+  "java-generic-throw": [
+    "CWE-397"
+  ],
+  "java-insecure-cookie": [
+    "CWE-614"
+  ],
+  "java-insecure-deserialize": [
+    "CWE-502"
+  ],
+  "java-integer-overflow": [
+    "CWE-190"
+  ],
+  "java-ldap-injection": [
+    "CWE-90"
+  ],
+  "java-numeric-truncation": [
+    "CWE-197"
+  ],
+  "java-obsolete-api": [
+    "CWE-477"
+  ],
+  "java-overbroad-catch": [
+    "CWE-396"
+  ],
+  "java-path-traversal": [
+    "CWE-23",
+    "CWE-36"
+  ],
+  "java-response-splitting": [
+    "CWE-113"
+  ],
+  "java-sql-injection": [
+    "CWE-89"
+  ],
+  "java-string-identity-compare": [
+    "CWE-597"
+  ],
+  "java-suspicious-comment": [
+    "CWE-546"
+  ],
+  "java-system-exit": [
+    "CWE-382"
+  ],
+  "java-unbounded-allocation": [
+    "CWE-789"
+  ],
+  "java-unbounded-loop": [
+    "CWE-400",
+    "CWE-606"
+  ],
+  "java-unsafe-reflection": [
+    "CWE-470"
+  ],
+  "java-weak-hash": [
+    "CWE-327",
+    "CWE-328"
+  ],
+  "java-weak-prng": [
+    "CWE-338"
+  ],
+  "java-weak-random": [
+    "CWE-338"
+  ],
+  "java-xpath-injection": [
+    "CWE-643"
+  ],
+  "java-xss-reflected": [
+    "CWE-80",
+    "CWE-81",
+    "CWE-83"
+  ],
+  "java-xxe": [
+    "CWE-611"
+  ],
+  "js-client-secret-storage": [
+    "CWE-922"
+  ],
+  "js-innerhtml": [
+    "CWE-79"
+  ],
+  "js-prototype-pollution": [
+    "CWE-1321"
+  ],
+  "js-settimeout-string": [
+    "CWE-94"
+  ],
+  "native-assign-in-if": [
+    "CWE-481"
+  ],
+  "native-atoi": [
+    "CWE-197"
+  ],
+  "native-c-cast": [
+    "CWE-682"
+  ],
+  "native-delete-this": [
+    "CWE-672"
+  ],
+  "native-format-string": [
+    "CWE-134"
+  ],
+  "native-gets": [
+    "CWE-120"
+  ],
+  "native-malloc-no-cast-check": [
+    "CWE-476"
+  ],
+  "native-new-delete": [
+    "CWE-762"
+  ],
+  "native-return-address-of-local": [
+    "CWE-562"
+  ],
+  "native-signed-overflow-check": [
+    "CWE-190"
+  ],
+  "native-sprintf": [
+    "CWE-120"
+  ],
+  "native-strcat": [
+    "CWE-120"
+  ],
+  "native-strcpy": [
+    "CWE-120"
+  ],
+  "native-strict-aliasing-cast": [
+    "CWE-758"
+  ],
+  "native-strlen-in-for": [
+    "CWE-125"
+  ],
+  "native-system-nonliteral": [
+    "CWE-78"
+  ],
+  "py-access-default-allow": [
+    "CWE-636"
+  ],
+  "py-assert-validation": [
+    "CWE-617"
+  ],
+  "py-auth-fail-open": [
+    "CWE-636"
+  ],
+  "py-bare-except": [
+    "CWE-396"
+  ],
+  "py-bind-all-interfaces": [
+    "CWE-1327"
+  ],
+  "py-empty-secret-default": [
+    "CWE-1188"
+  ],
+  "py-except-pass": [
+    "CWE-390"
+  ],
+  "py-insecure-deserialize": [
+    "CWE-502"
+  ],
+  "py-os-command-injection": [
+    "CWE-78"
+  ],
+  "py-random-security": [
+    "CWE-338"
+  ],
+  "py-requests-no-timeout": [
+    "CWE-400"
+  ],
+  "py-route-missing-authentication": [
+    "CWE-306"
+  ],
+  "py-route-missing-authorization": [
+    "CWE-862"
+  ],
+  "py-sql-injection": [
+    "CWE-89"
+  ],
+  "py-subprocess-no-timeout": [
+    "CWE-400"
+  ],
+  "py-subprocess-shell": [
+    "CWE-78"
+  ],
+  "py-tempfile-insecure": [
+    "CWE-377"
+  ],
+  "py-unbounded-read": [
+    "CWE-770"
+  ],
+  "py-upload-unrestricted": [
+    "CWE-434"
+  ],
+  "py-verify-disabled-on-error": [
+    "CWE-295"
+  ],
+  "py-yaml-load": [
+    "CWE-502"
+  ],
+  "rust-command-injection": [
+    "CWE-78"
+  ],
+  "scanf-unbounded": [
+    "CWE-120"
+  ],
+  "signed-overflow-check": [
+    "CWE-190"
+  ],
+  "sizeof-pointer-arg": [
+    "CWE-467"
+  ],
+  "strict-aliasing": [
+    "CWE-758"
+  ],
+  "tls-verify-disabled": [
+    "CWE-295"
+  ],
+  "unsafe-libc": [
+    "CWE-120"
+  ],
+  "unsigned-underflow": [
+    "CWE-191"
+  ],
+  "weak-hash": [
+    "CWE-327"
+  ],
+  "weak-rng": [
+    "CWE-338"
+  ]
+}

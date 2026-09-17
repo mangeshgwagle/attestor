@@ -18,7 +18,7 @@ from typing import Any
 
 
 SCHEMA = "attestor-release-manifest/3.0"
-PRODUCT_VERSION = "4.2"
+PRODUCT_VERSION = "4.3"
 MAX_FILES = 50_000
 MAX_TOTAL_BYTES = 1024 * 1024 * 1024
 MAX_FILE_BYTES = 128 * 1024 * 1024

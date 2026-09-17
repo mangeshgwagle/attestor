@@ -30,7 +30,7 @@ import control_inventory42 as inventory
 import control_policy42 as policy
 
 
-VERSION = "4.2"
+VERSION = "4.3"
 SCHEMA = "attestor-owner-control/4.2"
 
 _EXECUTION_BASE = {
@@ -193,7 +193,7 @@ def run(
     raw_coverage = result.get("coverage")
     coverage = (
         dict(raw_coverage) if isinstance(raw_coverage, Mapping)
-        else {"complete": True, "gaps": []}
+        else {"complete": False, "gaps": ["coverage data missing from result"]}
     )
     body = {
         "schema": SCHEMA,
@@ -428,6 +428,12 @@ def _load_plan_file(value: str) -> dict[str, Any]:
             or int(getattr(before, "st_nlink", 1)) != 1
             or not 1 <= int(before.st_size) <= policy.MAX_DOCUMENT_BYTES):
         raise OwnerControlError("plan file is unsafe or outside its boundary")
+    if os.name == "nt":
+        if int(getattr(before, "st_ino", 0)) == 0:
+            import warnings
+            warnings.warn("filesystem does not report inode numbers; "
+                          "TOCTOU identity checks are degraded",
+                          stacklevel=2)
     flags = os.O_RDONLY | int(getattr(os, "O_BINARY", 0))
     flags |= int(getattr(os, "O_NOFOLLOW", 0))
     try:

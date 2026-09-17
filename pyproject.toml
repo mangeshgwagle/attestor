@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "attestor"
 version = "4.3.0"
-description = "Hybrid security auditor: interprocedural dataflow + grounded LLM adjudication + dynamic confirmation"
+description = "Attestor -- for AI's, by AI. Security analysis + business automation with REST API for enterprise CI/CD"
 requires-python = ">=3.10"
 
 [project.optional-dependencies]
@@ -26,7 +26,7 @@ package-dir = {"attestor" = "detector"}
 packages = ["attestor"]
 
 [tool.setuptools.package-data]
-attestor = ["*.py"]
+attestor = ["*.py", "ui/*.html", "ui/*.js", "ui/*.css", "ui/*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

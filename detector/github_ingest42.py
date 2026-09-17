@@ -60,7 +60,7 @@ from typing import Any, Iterator
 from urllib.parse import urlparse
 
 
-VERSION = "4.2"
+VERSION = "4.3"
 
 GITHUB_API = "https://api.github.com"
 

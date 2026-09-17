@@ -60,7 +60,7 @@ import analysis_snapshot41 as snapshot41  # noqa: E402
 
 
 SCHEMA = "attestor.snapshot-attestation/4.2"
-VERSION = "4.2"
+VERSION = "4.3"
 ALGORITHM = "hmac-sha256"
 MIN_KEY_BYTES = 32
 KEY_ID_PATTERN = re.compile(r"[A-Za-z0-9_.-]{1,128}")

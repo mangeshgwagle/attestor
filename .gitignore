@@ -50,6 +50,12 @@ flywheel_pairs.jsonl
 
 # model weights and GGUF exports (too large / built by training notebooks)
 *.gguf
+*.safetensors
+*.pt
+*.pth
+models/
+attestor.egg-info/
+scratchpad/
 
 # external benchmark corpus (fetched by OPENCODE_TASK_corpus.md; reproducible)
 corpus/raw/

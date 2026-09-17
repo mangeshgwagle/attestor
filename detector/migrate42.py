@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any, Callable
 
-VERSION = "4.2"
+VERSION = "4.3"
 
 # =========================================================================== #
 #  DATA TYPES                                                                  #

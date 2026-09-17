@@ -50,7 +50,7 @@ from typing import Any
 import numpy as np
 
 SCHEMA = "attestor.gate-endurance/1.0"
-VERSION = "4.2"
+VERSION = "4.3"
 
 # Checkpoints are cheap relative to an epoch on a corpus this size, and the
 # cost of losing an hour of training is much larger than the cost of writing.

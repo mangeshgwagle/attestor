@@ -21,7 +21,7 @@ from datetime import datetime
 from enum import Enum, auto
 from typing import Any
 
-VERSION = "4.2"
+VERSION = "4.3"
 
 
 # =========================================================================== #

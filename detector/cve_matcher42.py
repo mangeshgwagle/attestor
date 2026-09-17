@@ -81,6 +81,26 @@ def _version_tokens(version):
     return tuple(out) if out else ((2, 0, ""),)
 
 
+_PRERELEASE_RANK = {
+    "dev": -4, "alpha": -3, "a": -3, "beta": -2, "b": -2,
+    "rc": -1, "cr": -1, "pre": -1, "preview": -1,
+    "release": 0, "final": 0, "ga": 0, "sp": 1,
+}
+
+
+def _normalize_tokens(tokens):
+    out = []
+    for kind, num, text in tokens:
+        if kind == 0:
+            out.append((0, num))
+        else:
+            rank = _PRERELEASE_RANK.get(text)
+            if rank is None:
+                return None
+            out.append((1, rank))
+    return tuple(out)
+
+
 def compare_versions(left, right):
     """Return -1/0/1, or None when the pair is not confidently comparable."""
     try:
@@ -90,35 +110,41 @@ def compare_versions(left, right):
         return None
     if not lt or not rt:
         return None
-    # any alphabetic component makes the comparison inconclusive; guessing
-    # an ordering for pre-release tags is exactly the wrong place to be clever
-    if any(part[0] != 0 for part in lt + rt):
+    nl = _normalize_tokens(lt)
+    nr = _normalize_tokens(rt)
+    if nl is None or nr is None:
         return None
-    return -1 if lt < rt else (1 if lt > rt else 0)
+    return -1 if nl < nr else (1 if nl > nr else 0)
 
 
 def _matches_range(version, affected):
-    for clause in re.split(r"\|\||,", affected):
-        clause = clause.strip()
-        if not clause:
-            continue
-        match = re.fullmatch(r"(<=|>=|<|>|=)\s*([^\s,|]+)", clause)
-        if not match:
-            return None
-        op, bound = match.group(1), match.group(2)
-        cmp_result = compare_versions(version, bound)
-        if cmp_result is None:
-            return None
-        ok = {
-            "<": cmp_result < 0,
-            "<=": cmp_result <= 0,
-            ">": cmp_result > 0,
-            ">=": cmp_result >= 0,
-            "=": cmp_result == 0,
-        }[op]
-        if not ok:
-            return False
-    return True
+    groups = affected.split("||")
+    for group in groups:
+        group_match = True
+        for clause in group.split(","):
+            clause = clause.strip()
+            if not clause:
+                continue
+            match = re.fullmatch(r"(<=|>=|<|>|=)\s*([^\s,|]+)", clause)
+            if not match:
+                return None
+            op, bound = match.group(1), match.group(2)
+            cmp_result = compare_versions(version, bound)
+            if cmp_result is None:
+                return None
+            ok = {
+                "<": cmp_result < 0,
+                "<=": cmp_result <= 0,
+                ">": cmp_result > 0,
+                ">=": cmp_result >= 0,
+                "=": cmp_result == 0,
+            }[op]
+            if not ok:
+                group_match = False
+                break
+        if group_match:
+            return True
+    return False
 
 
 def load_feed(path=None):
@@ -129,8 +155,8 @@ def load_feed(path=None):
     entries = feed.get("entries")
     if not isinstance(entries, list):
         raise CveError('feed must contain an "entries" list')
-    if len(entries) > FEED_ENTRY_CAP:
-        raise CveError("feed exceeds entry cap %d" % FEED_ENTRY_CAP)
+    if len(entries) > DEP_FEED_ENTRY_CAP:
+        raise CveError("feed exceeds entry cap %d" % DEP_FEED_ENTRY_CAP)
     return feed
 
 
@@ -142,7 +168,7 @@ def collect_dependencies(directory="."):
                    if d not in (".git", ".venv", "venv",
                                 "__pycache__", "node_modules")]
         for name in files:
-            if seen >= DEP_0:
+            if seen >= DEP_FEED_ENTRY_CAP:
                 break
             lower = name.lower()
             path = os.path.join(root, name)
@@ -161,7 +187,9 @@ def collect_dependencies(directory="."):
             for n, v, s in deduped]
 
 
-_REQ_LINE = re.compile(r"^([A-Za-z0-9_.\-]+)\s*(?:==|===)\s*([^\s;#]+)")
+_REQ_LINE = re.compile(
+    r"^([A-Za-z0-9_.\-]+)\s*(?:~=|===|==|!=|<=|>=|<|>)\s*([^\s;#,]+)"
+)
 
 
 def _parse_requirements(path):
@@ -206,7 +234,7 @@ def _parse_package_json(path):
             data = json.load(handle)
         for section in ("dependencies", "devDependencies"):
             for name, spec in data.get(section, {}).items():
-                cleaned = re.sub(r"[^0-9A-Za-z.\-]", "", str(spec))
+                cleaned = re.sub(r"^[\^~>=<! ]+", "", str(spec)).strip()
                 if cleaned:
                     out.append({"name": name, "version": cleaned,
                                 "source": path})

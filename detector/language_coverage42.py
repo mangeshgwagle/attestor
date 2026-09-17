@@ -38,7 +38,7 @@ from typing import Any, Iterable, Sequence
 import detect
 
 SCHEMA = "attestor.language-coverage/4.2"
-VERSION = "4.2"
+VERSION = "4.3"
 
 # Rules registered against "*" run on any text. Real coverage means a rule
 # written for the language.

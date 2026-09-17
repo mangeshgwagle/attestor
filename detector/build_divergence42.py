@@ -62,7 +62,7 @@ import semantic_graph41 as semantic  # noqa: E402
 
 
 SCHEMA = "attestor.build-divergence/4.2"
-VERSION = "4.2"
+VERSION = "4.3"
 MAX_LISTING_BYTES = 8 * 1024 * 1024
 MAX_SITES_PER_CAPABILITY = 25
 
@@ -251,7 +251,7 @@ def capabilities_from_assembly(listings: Mapping[str, str]) -> Side:
                 except (TypeError, ValueError):
                     continue
             if _SYSCALL_INSTR.search(line):
-                for number in pending[-4:]:
+                for number in pending[-16:]:
                     capability = _SYSCALL_CAPABILITY.get(number)
                     if capability:
                         side.add(capability, Evidence(

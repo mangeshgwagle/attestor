@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import trusted_access as ta
 import attestorbench41 as bench
 
-VERSION = "4.2"
+VERSION = "4.3"
 TCS_RESOURCE_PREFIX = "tenant/tcs/"
 REQUIRED_SCOPE = "scan:read"
 MIN_KEY_BYTES = ta.MIN_KEY_BYTES

@@ -1,0 +1,66 @@
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+      - release/*
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  ATTESTOR_EFFORT: 'high'
+  PYTHON_VERSION: '3.12'
+
+stages:
+  - stage: SecurityScan
+    displayName: 'Attestor Security Scan'
+    jobs:
+      - job: AttestorCheck
+        displayName: 'Run Attestor Check'
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '$(PYTHON_VERSION)'
+
+          - script: |
+              pip install -e ".[ai]" 2>/dev/null || pip install -e .
+            displayName: 'Install Attestor'
+
+          - script: |
+              python detector/cli.py check $(Build.SourcesDirectory) \
+                  --effort $(ATTESTOR_EFFORT) --json > $(Build.ArtifactStagingDirectory)/attestor-report.json
+            displayName: 'Security Scan'
+
+          - script: |
+              python detector/cli.py compliance $(Build.SourcesDirectory) \
+                  --framework owasp --json > $(Build.ArtifactStagingDirectory)/compliance-owasp.json
+              python detector/cli.py compliance $(Build.SourcesDirectory) \
+                  --framework nist --json > $(Build.ArtifactStagingDirectory)/compliance-nist.json
+            displayName: 'Compliance Reports'
+
+          - script: |
+              python detector/cli.py sbom $(Build.SourcesDirectory) \
+                  --format cyclonedx --json > $(Build.ArtifactStagingDirectory)/sbom.json
+            displayName: 'SBOM Generation'
+
+          - script: |
+              python -c "
+              import json, sys
+              with open('$(Build.ArtifactStagingDirectory)/attestor-report.json') as f:
+                  data = json.load(f)
+              findings = data if isinstance(data, list) else data.get('findings', [])
+              crits = sum(1 for f in findings if isinstance(f, dict) and f.get('severity') == 'CRITICAL')
+              print(f'CRITICAL findings: {crits}')
+              if crits > 0:
+                  print(f'##vso[task.logissue type=error]{crits} CRITICAL security findings detected')
+                  sys.exit(1)
+              "
+            displayName: 'Gate: Fail on CRITICAL'
+            condition: succeededOrFailed()
+
+          - task: PublishBuildArtifacts@1
+            inputs:
+              pathToPublish: '$(Build.ArtifactStagingDirectory)'
+              artifactName: 'attestor-reports'
+            condition: always()

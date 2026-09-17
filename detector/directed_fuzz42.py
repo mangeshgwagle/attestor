@@ -155,13 +155,15 @@ def _raises(fn, data, allowed):
 
 def directed_fuzz(fn, source=None, sink_names=(), seeds=None,
                   iterations=4000, seconds=30.0, seed_rng=0,
-                  tokens=(), allowed=(KeyboardInterrupt, SystemExit)):
+                  tokens=(), allowed=(SystemExit,)):
     if source:
         functions, edges = extract_callgraph(source, set(sink_names))
         distances = compute_distances(functions, edges)
     else:
         distances = {}
 
+    if not iterations and not seconds:
+        raise ValueError("at least one of iterations or seconds must be positive")
     deadline = time.monotonic() + seconds if seconds else None
     rng = random.Random(seed_rng)
 
@@ -328,8 +330,13 @@ def main(argv=None):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     fn = getattr(module, args.target_entry)
+    if not callable(fn):
+        print("directed_fuzz42: %r is not callable" % args.target_entry,
+              file=sys.stderr)
+        return 2
 
-    source = open(args.target_module, encoding="utf-8").read()
+    with open(args.target_module, encoding="utf-8") as _fh:
+        source = _fh.read()
     report = directed_fuzz(fn, source=source,
                            sink_names=tuple(args.sinks),
                            iterations=args.iterations,

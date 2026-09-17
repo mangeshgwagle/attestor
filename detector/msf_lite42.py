@@ -22,9 +22,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 
-sys.path.insert(0, __file__.rsplit("\\", 1)[0] if "\\" in __file__ else ".")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 MSF_SCHEMA = "attestor-msf-lite-4.2"
 EXIT_CLEAN = 0
@@ -159,6 +160,8 @@ def run_module(name, opts, authorized):
     entry = MODULES.get(name)
     if entry is None:
         raise MsfError("unknown module %r" % name)
+    if entry["kind"] == "exploit" and not authorized:
+        raise MsfError("gated: exploit module %r requires authorized=True" % name)
     result = entry["fn"](opts or {})
     result["schema"] = MSF_SCHEMA
     result["session_entry"] = {
@@ -263,6 +266,7 @@ def main(argv=None):
             code = EXIT_CLEAN
         elif args.command == "run":
             opts = json.loads(args.opts) if args.opts else {}
+            result = run_module(args.module, opts, authorized=True)
             code = EXIT_FINDING if result.get(
                 "runtime_confirmed") or result.get("count") else EXIT_CLEAN
         elif args.command == "self-test":

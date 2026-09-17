@@ -33,7 +33,7 @@ except ImportError:
     )
 
 
-VERSION = "4.2"
+VERSION = "4.3"
 REPORT_SCHEMA = "attestor.enterprise-security-lab/1.0"
 TENANT_SCHEMA = "attestor.enterprise-tenant-analysis/1.0"
 MANIFEST_SCHEMA = "attestor.enterprise-input-manifest/1.0"

@@ -11,7 +11,7 @@ import re
 from typing import Any, Iterable, Mapping, Sequence
 import trusted_access as ta
 
-VERSION = "4.2"
+VERSION = "4.3"
 APPROVAL_SCHEMA = "attestor.enterprise-approval/4.2"
 APPROVAL_REQUIRED_SCOPES = frozenset({"repo:write", "tenant:write", "admin:delete", "scan:publish"})
 TENANT_RE = re.compile(r"tenant/([A-Za-z0-9_.-]{1,64})/.*")

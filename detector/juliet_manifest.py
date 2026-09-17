@@ -57,7 +57,7 @@ import zipfile
 from typing import Iterator, NamedTuple
 
 SCHEMA = "attestor.juliet-manifest/1.0"
-VERSION = "4.2"
+VERSION = "4.3"
 
 MANIFEST_MEMBERS = ("C/manifest.xml", "manifest.xml", "Java/manifest.xml")
 

@@ -23,7 +23,7 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, __file__.rsplit("\\", 1)[0] if "\\" in __file__ else ".")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import local_brain42 as lb  # noqa: E402
 import brain42 as brain  # noqa: E402

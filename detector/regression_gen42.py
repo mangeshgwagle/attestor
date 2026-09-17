@@ -22,7 +22,7 @@ except ImportError:
     from detector.poc_gen42 import PocFinding, _refs  # type: ignore
 
 
-VERSION = "4.2"
+VERSION = "4.3"
 
 
 # --------------------------------------------------------------------------- #

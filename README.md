@@ -1,4 +1,4 @@
-# Attestor 4.2 — verifiable code security assurance
+# Attestor 4.3 — verifiable code security assurance
 
 > **Name.** This project was previously called Owen. It is now **Attestor**
 > throughout: the product, the `attestor` command, the module names, and the
@@ -14,13 +14,50 @@
 > exist precisely so a report cannot silently claim to come from a different
 > analyzer than the one that produced it.
 
-Attestor 4.2 is an offline-first code and cybersecurity assurance toolkit.
+Attestor 4.3 is an offline-first code and cybersecurity assurance toolkit.
 Its default coding path combines deterministic static analysis, repository
 graphs, correctness checks, supply-chain and secret-lifecycle evidence,
 review-only improved results, conservative finding adjudication, and
 source-bound reporting. It does not execute target code or contact the network
 on that path. Non-coding Research Mode remains a separate, explicitly online
 public-web workflow.
+
+### Service assessment and CLI quick start
+
+From this directory in PowerShell, start the local interface with
+`./attestor.ps1 ui`, then open `http://127.0.0.1:8787` and choose **Security
+assessment**. Enter exact targets, preview the checks, confirm permission,
+and run. Results include observations, check outcomes, cancellation, and
+HTML/JSON downloads. Download reports before restarting the UI; assessment
+reports remain in the current session, separate from code-analysis history.
+The partridge artwork is included in the interface.
+
+The CLI has concise help, searchable commands, typo suggestions, and JSON
+output. `./attestor.ps1 list security`, `./attestor.ps1 help check`, and
+`./attestor.ps1 status --json` are useful starting points. The installed
+`attestor security` and `attestor ui` entrypoints expose the same assessment
+workflow. The source launcher retains the 4.2 distribution label; the restored
+installed CLI retains its existing 4.4 version label.
+
+```powershell
+./attestor.ps1 security status
+./attestor.ps1 security plan --target https://your-host --ports 80,443 --out plan.json
+# Copy the confirmation digest printed by the preview:
+./attestor.ps1 security run --plan plan.json --confirm DIGEST --authorized --out assessment-results
+./attestor.ps1 security audit-verify --input assessment-results/report.json
+```
+
+Plans expire in one hour and allow up to eight exact targets and sixteen TCP
+ports, with a default budget of 64 checks and a 60-second run limit. The checks
+make TCP connections and HTTP HEAD requests to entered URLs; redirects are
+not followed. Findings are exposure/configuration observations, not confirmed
+exploits. Partial and cancelled reports preserve completed evidence. Output
+paths must be new, so existing reports are not overwritten.
+
+Metasploit at `C:\metasploit-framework` is detected locally through its
+installation manifest. This assessment workflow reports its availability but
+does not launch Metasploit modules. Audit hashes verify internal consistency;
+they are not signatures or independent proof of report origin.
 
 Attestor is not a distilled language model. It is primarily a deterministic
 analysis and orchestration toolkit, and this distribution also ships a small

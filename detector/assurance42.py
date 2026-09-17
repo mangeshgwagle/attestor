@@ -40,7 +40,7 @@ import semantic_graph41
 
 
 SCHEMA = "attestor.assurance/4.2-experimental"
-VERSION = "4.2"
+VERSION = "4.3"
 COMPONENT_SCHEMA = "attestor.assurance-component/4.2"
 EXIT_CLEAN = 0
 EXIT_FINDINGS = 1

@@ -20,7 +20,7 @@ import computer_scan41
 import control_policy42 as policy
 
 
-VERSION = "4.2"
+VERSION = "4.3"
 SCHEMA = "attestor-owner-control-inventory/4.2"
 MAX_ENTRIES_PER_DIRECTORY = policy.MAX_ENTRIES_PER_DIRECTORY
 MAX_HASH_FILE_BYTES = policy.MAX_HASH_FILE_BYTES

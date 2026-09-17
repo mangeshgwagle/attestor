@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "attack-graph-preview",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "9123"],
+      "port": 9123
+    }
+  ]
+}

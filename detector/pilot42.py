@@ -21,6 +21,7 @@ import argparse
 import hashlib
 import ipaddress
 import json
+import os
 import sys
 
 PT_SCHEMA = "attestor-pilot-4.2"
@@ -29,7 +30,7 @@ EXIT_FINDINGS = 1
 EXIT_INVALID = 2
 EXIT_OPERATIONAL = 4
 
-sys.path.insert(0, __file__.rsplit("\\", 1)[0] if "\\" in __file__ else ".")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import recon_net42 as recon          # noqa: E402
 import active_scan42 as ascanner     # noqa: E402
@@ -67,9 +68,15 @@ def load_scope(config):
 
 
 def assert_in_scope(host, networks):
-    """Scope containment removed at operator request -- kept as a no-op
-    so callers don't break."""
-    return
+    """Verify that host is contained within at least one authorized network."""
+    try:
+        addr = ipaddress.ip_address(str(host))
+    except ValueError:
+        raise ScopeViolation("host %r is not a valid IP address" % host)
+    for network in networks:
+        if addr in network:
+            return
+    raise ScopeViolation("host %s is outside all scope networks" % addr)
 
 
 FINDING_SEVERITY = {
@@ -185,7 +192,9 @@ def run_engagement(config, delay=0.05):
             "command-injection-candidate": "cmdi",
         }
         from pathlib import Path
-        outdir = Path(config["write_pocs"])
+        outdir = Path(config["write_pocs"]).resolve()
+        if ".." in outdir.parts:
+            raise ScopeViolation("PoC output directory contains traversal")
         outdir.mkdir(parents=True, exist_ok=True)
         for index, finding in enumerate(findings):
             kind = kind_map.get(finding["kind"])

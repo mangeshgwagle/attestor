@@ -47,12 +47,19 @@
     attestor memory learn            # learn codebase patterns
     attestor retrain                 # retrain owen-coder from feedback
     attestor retrain --colab         # export Colab notebook for GPU training
+    attestor novel .                 # detect structurally unusual code patterns
+    attestor explain .               # explain findings in natural language
+    attestor serve                   # start REST API server (enterprise)
+    attestor serve --port 9000       # custom port
     attestor control policy          # show Owner Control policy
     attestor version                 # version info
 """
 from __future__ import annotations
 
 import argparse
+import difflib
+import importlib
+import importlib.util
 import json
 import os
 import sys
@@ -62,7 +69,8 @@ _DETECTOR = Path(__file__).resolve().parent
 if os.fspath(_DETECTOR) not in sys.path:
     sys.path.insert(0, os.fspath(_DETECTOR))
 
-VERSION = "4.4"
+VERSION = "4.3"
+_MACHINE_OUTPUT = False
 BANNER = r"""
    _   _   _            _
   / \ | |_| |_ ___  ___| |_ ___  _ __
@@ -73,8 +81,87 @@ BANNER = r"""
 
 
 def _banner():
-    sys.stderr.write(BANNER.lstrip("\n"))
-    sys.stderr.flush()
+    if not _MACHINE_OUTPUT and sys.stderr.isatty():
+        sys.stderr.write("Attestor %s\n" % VERSION)
+        sys.stderr.flush()
+
+
+def _progress(message: str) -> None:
+    """Keep diagnostics away from machine-readable stdout."""
+    if not _MACHINE_OUTPUT:
+        print(message)
+
+
+class CliUsageError(ValueError):
+    pass
+
+
+class CliParser(argparse.ArgumentParser):
+    def error(self, message):
+        raise CliUsageError(message)
+
+
+def _quick_help() -> None:
+    print("Attestor %s | security assessments and code review" % VERSION)
+    print("\nUsage: attestor <command> [options]")
+    print("\nStart here:")
+    for command, description in (
+            ("ui", "open the local assessment interface"),
+            ("security", "preview an assessment, run checks, export evidence"),
+            ("check", "scan local code and prioritize findings"),
+            ("scan", "grade Python files A-F"),
+            ("report", "export an HTML report for local code"),
+            ("status", "show installed command availability"),
+            ("list", "search all commands")):
+        print("  %-12s %s" % (command, description))
+    print("\nExamples:")
+    print("  attestor ui")
+    print("  attestor security plan --target https://example.test --out plan.json")
+    print('  attestor check "path to project" --json')
+    print("  attestor list taint")
+    print("\nMore: attestor help <command> | attestor --help-all")
+    print("Options: --version | --no-color")
+
+
+def _command_parsers(parser):
+    return next(action.choices for action in parser._actions
+                if isinstance(action, argparse._SubParsersAction))
+
+
+def cmd_list(args):
+    parser = build_parser()
+    action = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
+    rows = [{"command": choice.dest, "description": choice.help}
+            for choice in action._choices_actions
+            if args.search.casefold() in (choice.dest + " " + choice.help).casefold()]
+    if args.json:
+        print(json.dumps({"version": VERSION, "commands": rows}, indent=2))
+    else:
+        print("Attestor %s - %d commands" % (VERSION, len(rows)))
+        for row in rows:
+            print("  %-24s %s" % (row["command"], row["description"]))
+        print("\nDetails: attestor help <command>")
+    return 0
+
+
+def cmd_status(args):
+    modules = {"security": "security_assessment", "ui": "attestor_ui",
+               "check": "detect", "scan": "grade", "report": "html_report"}
+    checks = [{"command": name, "available": importlib.util.find_spec(module) is not None}
+              for name, module in modules.items()]
+    report = {"version": VERSION, "python": sys.executable, "location": str(_DETECTOR),
+              "ok": all(check["available"] for check in checks), "commands": checks,
+              "note": "Availability checks do not execute scanners or verify the whole release."}
+    if args.json:
+        print(json.dumps(report, indent=2))
+    else:
+        print("Attestor %s - status" % VERSION)
+        print("Location: " + str(_DETECTOR))
+        for check in checks:
+            print("  [%-7s] %s" % ("OK" if check["available"] else "MISSING", check["command"]))
+        print("\n" + report["note"])
+        print("Next: attestor ui | attestor security --help")
+    return 4 if args.command == "doctor" and not report["ok"] else 0
 
 
 class C:
@@ -106,14 +193,18 @@ EFFORT_SCANNERS = {
     "medium": ["core", "secrets", "exploits", "iac", "js"],
     "high":   ["core", "secrets", "exploits", "iac", "js", "taint", "supply", "cicd", "git"],
     "max":    ["core", "secrets", "exploits", "iac", "js", "taint", "supply", "cicd",
-               "git", "similarity", "binary"],
+               "git", "similarity", "binary", "novel", "phantom"],
 }
+
+
+_scan_errors: list[str] = []
 
 
 def _run_effort(root: str, effort: str) -> list[dict]:
     """Run the scanner set for the given effort level and return unified findings."""
     wanted = set(EFFORT_SCANNERS.get(effort, EFFORT_SCANNERS["medium"]))
     findings: list[dict] = []
+    _scan_errors.clear()
 
     def _add(objs, cat=None, cwe_attr=None):
         for f in objs:
@@ -127,19 +218,26 @@ def _run_effort(root: str, effort: str) -> list[dict]:
                 "cwe": getattr(f, cwe_attr, "") if cwe_attr else getattr(f, "cwe", ""),
             })
 
-    if "core" in wanted:
+    def _try_scanner(name: str, fn):
         try:
-            import detect
-            for p in detect.collect_paths([root]):
-                for f in detect.scan_file(p):
-                    findings.append({
-                        "path": getattr(f, "path", p), "line": getattr(f, "line", 0),
-                        "rule_id": getattr(f, "rule", ""),
-                        "severity": getattr(f, "severity", "MEDIUM"),
-                        "description": getattr(f, "message", ""), "category": "core",
-                    })
-        except Exception:
-            pass
+            fn()
+        except Exception as exc:
+            _scan_errors.append(f"{name}: {exc}")
+
+    def _core():
+        import detect
+        for p in detect.collect_paths([root]):
+            for f in detect.scan_file(p):
+                findings.append({
+                    "path": getattr(f, "path", p), "line": getattr(f, "line", 0),
+                    "rule_id": getattr(f, "rule", ""),
+                    "severity": getattr(f, "severity", "MEDIUM"),
+                    "description": getattr(f, "message", ""), "category": "core",
+                })
+
+    if "core" in wanted:
+        _try_scanner("core", _core)
+
     scanner_map = {
         "secrets": ("secret_scanner", "secrets"), "exploits": ("exploit_detector", None),
         "iac": ("iac_scanner", None), "js": ("js_scanner", None),
@@ -147,39 +245,58 @@ def _run_effort(root: str, effort: str) -> list[dict]:
         "binary": ("binary_analyzer", None),
     }
     for key, (modname, cat) in scanner_map.items():
-        if key in wanted:
-            try:
-                mod = __import__(modname)
-                fn = getattr(mod, "scan_directory", None) or getattr(mod, "scan", None)
-                _add(fn(root), cat)
-            except Exception:
-                pass
+        if key not in wanted:
+            continue
+
+        def _run_mapped(mn=modname, c=cat):
+            mod = __import__(mn)
+            fn = getattr(mod, "scan_directory", None) or getattr(mod, "scan", None)
+            if fn is None:
+                raise AttributeError(f"{mn} has no scan_directory or scan function")
+            _add(fn(root), c)
+
+        _try_scanner(key, _run_mapped)
+
     if "taint" in wanted:
-        try:
+        def _taint():
             import taint_tracker
             for fl in taint_tracker.scan_directory(root):
                 findings.append({"path": fl.sink_file, "line": fl.sink_line,
                                  "rule_id": f"TAINT-{fl.sink_type}", "severity": "HIGH",
                                  "description": f"{fl.source_type} -> {fl.sink_type}",
                                  "category": "taint", "cwe": fl.sink_cwe})
-        except Exception:
-            pass
+        _try_scanner("taint", _taint)
+
     if "git" in wanted:
-        try:
+        def _git():
             import git_history
             _add(git_history.scan(root), None)
-        except Exception:
-            pass
+        _try_scanner("git", _git)
+
     if "similarity" in wanted:
-        try:
+        def _sim():
             import semantic_similarity
             for m in semantic_similarity.scan_directory(root):
                 findings.append({"path": m.path, "line": m.line_start,
                                  "rule_id": m.cve_id, "severity": m.cve_severity,
                                  "description": m.cve_description, "category": "similarity",
                                  "cwe": m.cve_cwe})
-        except Exception:
-            pass
+        _try_scanner("similarity", _sim)
+
+    if "novel" in wanted:
+        def _novel():
+            import novel_detector
+            nd = novel_detector.NovelDetector()
+            for f in nd.scan_directory(root):
+                findings.append({
+                    "path": f.path, "line": f.line,
+                    "rule_id": f"NOVEL-{f.category.upper()}",
+                    "severity": f.severity,
+                    "description": f.description,
+                    "category": f.category,
+                })
+        _try_scanner("novel", _novel)
+
     return findings
 
 
@@ -193,7 +310,9 @@ def cmd_check(args):
     _banner()
     root = args.root
     effort = args.effort
-    print(f"\n  {C.paint('attestor check', 'bold', 'cyan')}  "
+    if not Path(root).exists():
+        raise CliUsageError("target does not exist: " + root)
+    _progress(f"\n  {C.paint('attestor check', 'bold', 'cyan')}  "
           f"{root}   effort={C.paint(effort, 'bold')}\n")
 
     mem = mem_mod.Memory(root)
@@ -221,6 +340,20 @@ def cmd_check(args):
 
     total_raw = len(findings)
     suppressed = counts["suppress"]
+    elapsed = int(_time.time() * 1000) - _t0
+    mem.record_scan([t.finding for t in triaged], scan_type="check",
+                    paths=[root], duration_ms=elapsed)
+    exit_code = 3 if _scan_errors else (1 if actionable else 0)
+    if args.json:
+        print(json.dumps({
+            "schema": "attestor-check/1", "root": root, "effort": effort,
+            "status": "incomplete" if _scan_errors else "findings" if actionable else "clean",
+            "findings": triage.to_dict(triaged), "counts": counts,
+            "severity_counts": sev_counts, "scanner_errors": list(_scan_errors),
+            "memory_suppressed": mem_suppressed, "duration_ms": elapsed,
+            "exit_code": exit_code,
+        }, indent=2))
+        return exit_code
     print(f"  scanned with {len(EFFORT_SCANNERS[effort])} scanner group(s)")
     print(f"  {C.paint(str(total_raw), 'bold')} raw findings  ->  "
           f"{C.paint(str(len(actionable)), 'bold', 'green')} actionable  "
@@ -250,14 +383,12 @@ def cmd_check(args):
               f"{C.paint(f'attestor fix {root} --apply', 'bold', 'cyan')}")
     if mem_suppressed:
         print(f"  {C.paint(f'  {mem_suppressed} suppressed by memory (known FPs)', 'dim')}")
+    if _scan_errors:
+        print(f"\n  {C.paint(f'Scanner errors ({len(_scan_errors)}):', 'yellow', 'bold')}")
+        for err in _scan_errors:
+            print(f"    {C.paint('!', 'yellow')} {err}")
 
-    _elapsed = int(_time.time() * 1000) - _t0
-    mem.record_scan([t.finding for t in triaged], scan_type="check",
-                    paths=[root], duration_ms=_elapsed)
-
-    if args.json:
-        print(json.dumps(triage.to_dict(triaged), indent=2))
-    return min(sev_counts["CRITICAL"], 250)
+    return exit_code
 
 
 def cmd_scan(args):
@@ -504,7 +635,7 @@ def cmd_control(args):
 def cmd_secrets(args):
     import secret_scanner
     _banner()
-    print(f"\n  Secret Scanner -- scanning {', '.join(args.paths)}\n")
+    _progress(f"\n  Secret Scanner -- scanning {', '.join(args.paths)}\n")
     findings = []
     for p in args.paths:
         if os.path.isdir(p):
@@ -521,7 +652,7 @@ def cmd_secrets(args):
 def cmd_exploits(args):
     import exploit_detector
     _banner()
-    print(f"\n  Exploit Detector -- scanning {', '.join(args.paths)}\n")
+    _progress(f"\n  Exploit Detector -- scanning {', '.join(args.paths)}\n")
     findings = []
     for p in args.paths:
         if os.path.isdir(p):
@@ -538,7 +669,7 @@ def cmd_exploits(args):
 def cmd_payloads(args):
     import payload_decoder
     _banner()
-    print(f"\n  Payload Decoder -- scanning {', '.join(args.paths)}\n")
+    _progress(f"\n  Payload Decoder -- scanning {', '.join(args.paths)}\n")
     findings = []
     for p in args.paths:
         if os.path.isdir(p):
@@ -557,7 +688,7 @@ def cmd_sca(args):
     import sca_scanner
     _banner()
     root = args.root
-    print(f"\n  SCA Scanner -- checking dependencies in {root}\n")
+    _progress(f"\n  SCA Scanner -- checking dependencies in {root}\n")
     deps, findings = sca_scanner.scan(root, offline=args.offline)
     if args.json:
         print(json.dumps(sca_scanner.to_dict(deps, findings), indent=2))
@@ -569,7 +700,7 @@ def cmd_sca(args):
 def cmd_iac(args):
     import iac_scanner
     _banner()
-    print(f"\n  IaC Scanner -- scanning {', '.join(args.paths)}\n")
+    _progress(f"\n  IaC Scanner -- scanning {', '.join(args.paths)}\n")
     findings = []
     for p in args.paths:
         if os.path.isdir(p):
@@ -586,7 +717,7 @@ def cmd_iac(args):
 def cmd_js(args):
     import js_scanner
     _banner()
-    print(f"\n  JS/TS Scanner -- scanning {', '.join(args.paths)}\n")
+    _progress(f"\n  JS/TS Scanner -- scanning {', '.join(args.paths)}\n")
     findings = []
     for p in args.paths:
         if os.path.isdir(p):
@@ -603,7 +734,7 @@ def cmd_js(args):
 def cmd_ioc(args):
     import threat_intel
     _banner()
-    print(f"\n  Threat Intel IOC Scanner -- scanning {', '.join(args.paths)}\n")
+    _progress(f"\n  Threat Intel IOC Scanner -- scanning {', '.join(args.paths)}\n")
     findings = []
     for p in args.paths:
         if os.path.isdir(p):
@@ -620,7 +751,7 @@ def cmd_ioc(args):
 def cmd_surface(args):
     import attack_surface
     _banner()
-    print(f"\n  Attack Surface Mapper -- scanning {', '.join(args.paths)}\n")
+    _progress(f"\n  Attack Surface Mapper -- scanning {', '.join(args.paths)}\n")
     entries = []
     for p in args.paths:
         if os.path.isdir(p):
@@ -1513,6 +1644,115 @@ def cmd_schedule(args):
     return 0
 
 
+def cmd_novel(args):
+    """Detect structurally unusual code -- catches what rules miss."""
+    import novel_detector
+    if getattr(args, "no_color", False):
+        C.enabled = False
+    _banner()
+    root = args.root
+    _progress(f"\n  {C.paint('attestor novel', 'bold', 'cyan')}  {root}\n")
+
+    nd = novel_detector.NovelDetector(
+        z_threshold=getattr(args, "threshold", 2.0))
+
+    if os.path.isdir(root):
+        findings = nd.scan_directory(root)
+    else:
+        findings = nd.scan_file(root)
+
+    if args.json:
+        print(json.dumps(novel_detector.to_dict(findings), indent=2))
+    else:
+        print(novel_detector.render(findings))
+
+    return min(sum(1 for f in findings if f.severity == "HIGH"), 250)
+
+
+def cmd_explain(args):
+    """Explain findings in natural language."""
+    import explainer
+    if getattr(args, "no_color", False):
+        C.enabled = False
+    _banner()
+    root = args.root
+    effort = getattr(args, "effort", "medium")
+    _progress(f"\n  {C.paint('attestor explain', 'bold', 'cyan')}  "
+          f"{root}   effort={C.paint(effort, 'bold')}\n")
+
+    findings = _run_effort(root, effort)
+
+    if not findings:
+        if args.json:
+            print(json.dumps({"findings": [], "scanner_errors": list(_scan_errors)}))
+        else:
+            print("  No findings to explain.")
+            for error in _scan_errors:
+                print("  Scanner error: " + error, file=sys.stderr)
+        return 3 if _scan_errors else 0
+
+    top_n = getattr(args, "top", 10)
+    sev_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+    findings.sort(key=lambda f: sev_order.get(f.get("severity", "LOW"), 4))
+    findings = findings[:top_n]
+
+    exp = explainer.Explainer(
+        context_lines=getattr(args, "context", 5))
+    explanations = exp.explain_batch(findings)
+
+    if args.json:
+        print(json.dumps(explainer.to_dict(explanations), indent=2))
+    else:
+        print(explainer.render(explanations))
+
+    return 0
+
+
+def cmd_phantom(args):
+    """Phantom Analysis -- autonomous exploit verification (4.3)."""
+    import phantom43
+    _banner()
+    return phantom43.main([
+        args.root,
+        *(["--finding", args.finding] if args.finding else []),
+        *(["--severity", args.severity] if args.severity else []),
+        *(["--output", args.output] if args.output else []),
+        *(["--exploit"] if args.exploit else []),
+        *(["--effort", args.effort] if hasattr(args, "effort") else []),
+        *(["--json"] if args.json else []),
+        *(["--no-color"] if getattr(args, "no_color", False) else []),
+    ])
+
+
+def cmd_model_status(args):
+    """Show AI model status and availability (4.3)."""
+    import model_loader43
+    _banner()
+    info = model_loader43.status()
+    if args.json:
+        print(json.dumps(info, indent=2))
+        return 0
+    print(f"\n  {C.paint('Model Status', 'bold', 'cyan')}\n")
+    print(f"  Active backend:  {C.paint(info['active_backend'], 'bold')}")
+    print(f"  Active model:    {C.paint(info['active_model'], 'bold', 'green')}")
+    print(f"  LoRA adapter:    {info['adapter_found'] or C.paint('not found', 'dim')}")
+    print(f"  GGUF file:       {info['gguf_found'] or C.paint('not found', 'dim')}")
+    print(f"  Ollama (43):     {'yes' if info['ollama_finetuned'] else 'no'}")
+    print(f"  llama-cpp:       {'installed' if info['llama_cpp_available'] else 'not installed'}")
+    print()
+    return 0
+
+
+def cmd_serve(args):
+    """Start REST API server for enterprise/CI/CD integration."""
+    import api_server
+    _banner()
+    print(f"\n  {C.paint('attestor serve', 'bold', 'cyan')}  "
+          f"{args.host}:{args.port}\n")
+    api_server.serve(host=args.host, port=args.port)
+    return 0
+
+
 def cmd_hooks(args):
     import git_hooks
     if args.hooks_command == "install":
@@ -1609,7 +1849,10 @@ def cmd_memory(args):
     return 0
 
 
-def cmd_version(_args):
+def cmd_version(args):
+    if getattr(args, "json", False):
+        print(json.dumps({"version": VERSION, "python": sys.version.split()[0]}))
+        return 0
     _banner()
     print(f"  Attestor {VERSION}")
     print(f"  Python   {sys.version.split()[0]}")
@@ -1620,13 +1863,23 @@ def cmd_version(_args):
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = CliParser(
         prog="attestor",
-        description="Attestor 4.4 -- for AI's, by AI",
+        description="Attestor %s - security assessments and code review" % VERSION,
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__,
+        epilog="Start with attestor ui or attestor security --help. Use attestor help <command> for details.",
     )
-    sub = parser.add_subparsers(dest="command")
+    sub = parser.add_subparsers(dest="command", metavar="COMMAND")
+    sub.add_parser("security", help="preview an assessment, run checks, export evidence")
+    sub.add_parser("ui", help="open the local assessment interface")
+    p_list = sub.add_parser("list", help="search all commands")
+    p_list.add_argument("search", nargs="?", default="")
+    p_list.add_argument("--json", action="store_true")
+    p_list.set_defaults(func=cmd_list)
+    for command in ("status", "doctor"):
+        p_status = sub.add_parser(command, help="show installed command availability")
+        p_status.add_argument("--json", action="store_true")
+        p_status.set_defaults(func=cmd_status)
 
     # --- scan (Python grading) ---
     p_scan = sub.add_parser("scan", help="grade Python files A-F",
@@ -2231,28 +2484,116 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_mem.set_defaults(func=cmd_memory)
 
+    # --- novel (anomalous code detection) ---
+    p_novel = sub.add_parser("novel",
+                             help="detect structurally unusual code patterns")
+    p_novel.add_argument("root", nargs="?", default=".")
+    p_novel.add_argument("--threshold", type=float, default=2.0,
+                         help="z-score threshold for outlier detection (default 2.0)")
+    p_novel.add_argument("--json", action="store_true")
+    p_novel.add_argument("--no-color", action="store_true")
+    p_novel.set_defaults(func=cmd_novel)
+
+    # --- explain (natural language explanations) ---
+    p_explain = sub.add_parser("explain",
+                               help="explain findings in natural language")
+    p_explain.add_argument("root", nargs="?", default=".")
+    p_explain.add_argument("--effort", default="medium",
+                           choices=EFFORT_LEVELS)
+    p_explain.add_argument("--top", type=int, default=10,
+                           help="number of findings to explain")
+    p_explain.add_argument("--context", type=int, default=5,
+                           help="lines of code context around finding")
+    p_explain.add_argument("--json", action="store_true")
+    p_explain.add_argument("--no-color", action="store_true")
+    p_explain.set_defaults(func=cmd_explain)
+
+    # --- phantom (autonomous exploit verification -- 4.3 flagship) ---
+    p_phantom = sub.add_parser("phantom",
+                               help="autonomous exploit verification (4.3)",
+                               aliases=["verify-exploits", "prove"])
+    p_phantom.add_argument("root", nargs="?", default=".")
+    p_phantom.add_argument("--finding", help="filter by rule_id substring")
+    p_phantom.add_argument("--severity",
+                           choices=["CRITICAL", "HIGH", "MEDIUM", "LOW"],
+                           help="minimum severity to verify")
+    p_phantom.add_argument("--output", "-o", help="write JSON report to file")
+    p_phantom.add_argument("--exploit", action="store_true",
+                           help="generate standalone exploit scripts")
+    p_phantom.add_argument("--effort", default="medium",
+                           choices=EFFORT_LEVELS)
+    p_phantom.add_argument("--json", action="store_true")
+    p_phantom.add_argument("--no-color", action="store_true")
+    p_phantom.set_defaults(func=cmd_phantom)
+
+    # --- model (AI model status -- 4.3) ---
+    p_model = sub.add_parser("model",
+                             help="show AI model status and availability (4.3)",
+                             aliases=["ai"])
+    p_model.add_argument("--json", action="store_true")
+    p_model.set_defaults(func=cmd_model_status)
+
+    # --- serve (REST API) ---
+    p_serve = sub.add_parser("serve",
+                             help="start REST API server (enterprise deployment)")
+    p_serve.add_argument("--host", default="0.0.0.0")
+    p_serve.add_argument("--port", type=int, default=8844)
+    p_serve.set_defaults(func=cmd_serve)
+
     # --- version ---
-    p_ver = sub.add_parser("version", help="show version and AI status")
+    p_ver = sub.add_parser("version", help="show version information")
+    p_ver.add_argument("--json", action="store_true")
     p_ver.set_defaults(func=cmd_version)
 
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
+    global _MACHINE_OUTPUT
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    _MACHINE_OUTPUT = "--json" in arguments or "--format=json" in arguments or any(
+        value == "--format" and i + 1 < len(arguments) and arguments[i + 1] == "json"
+        for i, value in enumerate(arguments))
+    C.enabled = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None and not _MACHINE_OUTPUT
+    if "--no-color" in arguments:
+        C.enabled = False
+        arguments.remove("--no-color")
+    if arguments and arguments[0] == "help" and len(arguments) > 1:
+        arguments = [*arguments[1:], "--help"]
+    if not arguments or arguments in (["--help"], ["-h"], ["help"]):
+        _quick_help()
+        return 0
+    if arguments[0] in ("--version", "-V"):
+        arguments[0] = "version"
     parser = build_parser()
-    args = parser.parse_args(argv)
-    if not hasattr(args, "func"):
-        _banner()
+    if arguments == ["--help-all"]:
         parser.print_help()
         return 0
     try:
-        return args.func(args)
+        if arguments[0] in ("security", "ui"):
+            module = importlib.import_module("security_assessment" if arguments[0] == "security" else "attestor_ui")
+            return int(module.main(arguments[1:]) or 0)
+        commands = _command_parsers(parser)
+        if not arguments[0].startswith("-") and arguments[0] not in commands:
+            close = difflib.get_close_matches(arguments[0], commands, n=1, cutoff=0.6)
+            hint = " Did you mean '%s'?" % close[0] if close else " Try: attestor --help"
+            raise CliUsageError("unknown command '%s'.%s" % (arguments[0], hint))
+        args = parser.parse_args(arguments)
+        if not hasattr(args, "func"):
+            commands[args.command].print_help()
+            return 0
+        return int(args.func(args) or 0)
     except KeyboardInterrupt:
-        print("\ninterrupted", file=sys.stderr)
-        return 130
+        code, message = 130, "interrupted"
+    except CliUsageError as exc:
+        code, message = 2, str(exc)
     except Exception as exc:
-        print(f"attestor error: {exc}", file=sys.stderr)
-        return 2
+        code, message = 4, "%s: %s" % (type(exc).__name__, exc)
+    if _MACHINE_OUTPUT:
+        print(json.dumps({"ok": False, "error": message, "exit_code": code}))
+    else:
+        print("attestor: " + message, file=sys.stderr)
+    return code
 
 
 if __name__ == "__main__":

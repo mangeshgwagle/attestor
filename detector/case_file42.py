@@ -41,7 +41,7 @@ import json
 import re
 from typing import Any, Iterable, Mapping
 
-VERSION = "4.2"
+VERSION = "4.3"
 CASE_SCHEMA = "attestor-case-file/4.2"
 ENTRY_SCHEMA = "attestor-case-entry/4.2"
 

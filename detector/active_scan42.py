@@ -18,6 +18,8 @@ import argparse
 import json
 import sys
 import time
+import ipaddress
+import socket
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -78,7 +80,27 @@ class AsError(ValueError):
     pass
 
 
+def _check_ssrf(url):
+    hostname = urllib.parse.urlsplit(url).hostname
+    if not hostname:
+        raise AsError("url has no hostname")
+    try:
+        resolved = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC,
+                                      socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        raise AsError("cannot resolve %r: %s" % (hostname, exc)) from None
+    for family, _type, _proto, _canon, sockaddr in resolved:
+        addr = ipaddress.ip_address(sockaddr[0])
+        if addr.is_loopback or addr.is_private or addr.is_link_local:
+            raise AsError("target %s resolves to non-routable address %s"
+                          % (hostname, addr))
+        if str(addr) in ("169.254.169.254", "fd00::c2b6:a9ff:fea9:fea9"):
+            raise AsError("target %s resolves to cloud metadata address"
+                          % hostname)
+
+
 def _fetch(url, timeout):
+    _check_ssrf(url)
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -130,7 +152,7 @@ def scan_url(url, param="q", delay=DEFAULT_DELAY, timeout=DEFAULT_TIMEOUT,
     findings.extend(header_findings)
 
     for probe in PROBES:
-        if budget <= 0:
+        if max_requests > 0 and budget <= 0:
             break
         spend()
         probe_url = _build_url(url, param, probe["payload"])
@@ -253,6 +275,8 @@ def main(argv=None):
     parser.add_argument("--param", default="q")
     parser.add_argument("--delay", type=float, default=DEFAULT_DELAY)
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT)
+    parser.add_argument("--max-requests", type=int, default=0,
+                        help="request budget (0=unlimited)")
     parser.add_argument("--selftest", action="store_true")
     args = parser.parse_args(argv)
 

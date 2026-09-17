@@ -26,7 +26,7 @@ import sys
 import tempfile
 import time
 
-sys.path.insert(0, __file__.rsplit("\\", 1)[0] if "\\" in __file__ else ".")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from offensive_fuzz42 import gen_input, minimize  # noqa: E402
 
@@ -166,9 +166,13 @@ def fuzz_binary(runner, seeds=None, iterations=2000, seconds=30.0,
         tried += 1
         rc, err, crashed = execute(data)
         if crashed:
+            def _recrash(d):
+                _rc, _err, did_crash = execute(d)
+                if did_crash:
+                    raise RuntimeError("crash preserved")
             small = minimize(
                 data,
-                lambda d: (lambda r2: r2[2])(execute(d)),
+                _recrash,
                 (KeyboardInterrupt, SystemExit))
             hexed = small.hex()
             if hexed not in seen_crash_hex:

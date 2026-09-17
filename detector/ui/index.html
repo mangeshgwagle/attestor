@@ -14,7 +14,7 @@
   <div class="app-shell">
     <aside class="sidebar" id="sidebar" aria-label="Workbench navigation">
       <div class="brand-row">
-        <div class="brand-mark" aria-hidden="true">O</div>
+        <img class="brand-mark" src="/partridge-pear-tree.png" alt="Partridge perched in a pear tree">
         <div class="brand-copy">
           <strong>Attestor 4.2 distribution</strong>
           <span>4.1.4 analysis engine/protocol</span>
@@ -28,6 +28,9 @@
         </button>
         <button class="nav-item" data-view="scan" aria-controls="view-scan">
           <span class="nav-icon" aria-hidden="true">◎</span><span>New scan</span><kbd>Alt 2</kbd>
+        </button>
+        <button class="nav-item" data-view="assessment" aria-controls="view-assessment">
+          <span class="nav-icon" aria-hidden="true">◇</span><span>Security assessment</span>
         </button>
         <button class="nav-item" data-view="research" aria-controls="view-research">
           <span class="nav-icon" aria-hidden="true">R</span><span>Research</span>
@@ -58,6 +61,7 @@
       <section class="sidebar-section" aria-labelledby="quickActionsTitle">
         <div class="sidebar-label" id="quickActionsTitle">Quick actions</div>
         <div class="quick-actions">
+          <button data-view-link="assessment">Assess a service<span>Choose targets, preview checks, review evidence</span></button>
           <button id="attestor4Btn" data-quick-mode="attestor41">Attestor 4.1.4 Maximum<span>Attack paths, cloud, repair, and source-bound evidence</span></button>
           <button id="computerBtn" data-quick-mode="computer41">Find projects on this computer<span>Pathless, bounded, and permission required every run</span></button>
           <button id="researchBtn" data-quick-mode="research">Public-web research<span>Offline until you explicitly authorize online search</span></button>
@@ -103,6 +107,49 @@
       </header>
 
       <main id="mainContent" tabindex="-1">
+        <section class="view" id="view-assessment" data-view-panel="assessment" aria-labelledby="assessmentTitle" hidden>
+          <div class="view-title-row">
+            <div><h2 id="assessmentTitle">Security assessment</h2><p>Check service exposure and web configuration, then export the evidence.</p></div>
+            <span class="scan-stamp" id="assessmentToolStatus" role="status">Checking local tools</span>
+          </div>
+          <ol class="assessment-steps" aria-label="Assessment workflow">
+            <li id="assessmentStepTarget" class="current">1 <span>Choose targets</span></li>
+            <li id="assessmentStepPreview">2 <span>Review checks</span></li>
+            <li id="assessmentStepResults">3 <span>Findings &amp; report</span></li>
+          </ol>
+          <div class="assessment-layout">
+            <article class="panel">
+              <div class="panel-heading"><div><h3>What would you like to assess?</h3><p>Enter explicit service addresses within your assessment scope.</p></div></div>
+              <form id="assessmentForm" class="assessment-form">
+                <div class="field"><label for="assessmentTargets">Targets</label><textarea id="assessmentTargets" rows="4" required spellcheck="false" placeholder="One host, IP address, or web URL per line" aria-describedby="assessmentTargetHint"></textarea><small id="assessmentTargetHint">Use exact addresses. Web paths stay limited to the URLs you enter.</small></div>
+                <div class="assessment-options">
+                  <div class="field"><label for="assessmentPorts">Additional TCP ports</label><input id="assessmentPorts" type="text" inputmode="numeric" value="80,443" spellcheck="false"><small>Comma-separated port numbers.</small></div>
+                  <div class="field"><label for="assessmentLabel">Report name</label><input id="assessmentLabel" type="text" maxlength="80" placeholder="Service security review"></div>
+                </div>
+                <div class="form-actions"><button class="button primary large" id="assessmentPreviewBtn" type="submit">Preview assessment</button></div>
+                <p class="form-note">The preview lists the checks before you start the assessment.</p>
+              </form>
+              <div class="error-state" id="assessmentError" role="alert" hidden></div>
+            </article>
+            <article class="panel assessment-preview" aria-labelledby="assessmentPreviewTitle">
+              <div class="panel-heading"><div><h3 id="assessmentPreviewTitle">Assessment preview</h3><p id="assessmentPreviewHint">Your targets and planned checks will appear here.</p></div><span class="status-pill" id="assessmentState" role="status">Ready</span></div>
+              <div id="assessmentPreviewEmpty" class="empty-state compact"><span aria-hidden="true">◇</span><strong>Start with a preview</strong><p>Review the addresses, checks, and request limits before running.</p></div>
+              <div id="assessmentPlan" hidden>
+                <div id="assessmentPlanSummary" class="assessment-plan-summary"></div>
+                <ul id="assessmentChecks" class="assessment-checks"></ul>
+                <label class="assessment-confirm"><input id="assessmentAuthorized" type="checkbox"><span>I am authorized to assess these targets.</span></label>
+                <div class="form-actions"><button class="button primary large" id="assessmentRunBtn" type="button" disabled>Run assessment</button><button class="button danger-outline" id="assessmentCancelBtn" type="button" hidden>Stop</button></div>
+              </div>
+              <p id="assessmentProgress" class="assessment-progress" aria-live="polite"></p>
+            </article>
+          </div>
+          <article class="panel assessment-results" id="assessmentResults" aria-labelledby="assessmentResultsTitle" hidden>
+            <div class="panel-heading"><div><h3 id="assessmentResultsTitle">Assessment findings</h3><p id="assessmentResultSummary"></p></div><div class="form-actions"><button class="button secondary" id="assessmentExportHtmlBtn" type="button">Download report</button><button class="button tertiary" id="assessmentExportJsonBtn" type="button">Export JSON</button></div></div>
+            <div id="assessmentFindings" class="assessment-findings"></div>
+            <details class="assessment-evidence"><summary>Check results and audit trail</summary><pre id="assessmentEvidence"></pre></details>
+            <p class="form-note">Results are available for this server session. Download a report to keep the evidence.</p>
+          </article>
+        </section>
         <section class="view active" id="view-overview" data-view-panel="overview" aria-labelledby="overviewTitle">
           <div class="view-title-row">
             <div><h2 id="overviewTitle">Engineering and security overview</h2><p>Outcome-first triage across code quality, architecture, dependencies, configuration, and security boundaries.</p></div>

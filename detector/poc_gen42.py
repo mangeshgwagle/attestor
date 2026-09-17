@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 
-VERSION = "4.2"
+VERSION = "4.3"
 
 
 # --------------------------------------------------------------------------- #

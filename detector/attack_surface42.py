@@ -20,7 +20,7 @@ from enum import Enum, auto
 from typing import Any, Iterator
 
 
-VERSION = "4.2"
+VERSION = "4.3"
 
 
 class EntryType(Enum):

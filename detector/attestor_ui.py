@@ -42,11 +42,13 @@ import attestor414
 import cjp_authorization414
 import variant414
 import blind_escape_arena414
+import security_assessment
 from evidence_store41 import EvidenceStore, EvidenceStoreError, default_history_path
 UI_DIR = HERE / "ui"
 INDEX = UI_DIR / "index.html"
 UI_SCRIPT = UI_DIR / "ui23.js"
 UI_STYLES = UI_DIR / "ui23.css"
+PARTRIDGE_IMAGE = UI_DIR / "partridge-pear-tree.png"
 DEFAULT_TIMEOUT = 120
 MAX_BODY_BYTES = 128 * 1024
 # Historical and non-variant modes retain the established 4 MiB capture
@@ -94,6 +96,7 @@ CONTENT_SECURITY_POLICY = (
 )
 
 STATIC_ASSETS = {
+    "/partridge-pear-tree.png": (PARTRIDGE_IMAGE, "image/png"),
     "/ui23.js": (UI_SCRIPT, "text/javascript; charset=utf-8"),
     "/ui23.css": (UI_STYLES, "text/css; charset=utf-8"),
     # Old bookmarks remain harmless and receive the current, secured client.
@@ -858,6 +861,45 @@ def run_attestor(
     return result
 
 
+def _security_run_request(data: dict) -> dict:
+    """Validate the exact preview and per-run intent before queueing work."""
+    if set(data) != {"plan", "confirm_sha256", "authorized"}:
+        raise ValueError("Run requires the preview, its confirmation, and authorization.")
+    if data.get("authorized") is not True:
+        raise ValueError("Confirm that you are authorized to assess these targets.")
+    plan = security_assessment.validate_plan(data.get("plan"))
+    confirmation = data.get("confirm_sha256")
+    if (not isinstance(confirmation, str) or
+            not secrets.compare_digest(confirmation, plan["sha256"])):
+        raise ValueError("The assessment preview changed. Generate a new preview.")
+    return {"mode": "security-assessment", "plan": plan,
+            "confirm_sha256": confirmation, "authorized": True}
+
+
+def run_security_assessment(data: dict, event: threading.Event) -> dict:
+    """Run only the bounded assessment backend through the shared job queue."""
+    started = time.monotonic()
+    try:
+        request = _security_run_request({
+            "plan": data.get("plan"),
+            "confirm_sha256": data.get("confirm_sha256"),
+            "authorized": data.get("authorized"),
+        })
+        report = security_assessment.run_plan(
+            request["plan"], confirm_sha256=request["confirm_sha256"],
+            authorized=True, cancel_event=event)
+        cancelled = report.get("status") == "cancelled"
+        return {
+            "ok": report.get("status") not in {"failed", "cancelled"},
+            "cancelled": cancelled, "code": 130 if cancelled else 0,
+            "report": report, "output": json.dumps(report, ensure_ascii=False),
+            "elapsed_ms": int((time.monotonic() - started) * 1000),
+        }
+    except (ValueError, TypeError, OSError) as exc:
+        return {"ok": False, "code": 2, "output": str(exc)[:2000],
+                "elapsed_ms": int((time.monotonic() - started) * 1000)}
+
+
 class JobManager:
     def __init__(self, workers: int = MAX_ACTIVE_JOBS,
                  max_pending: int = MAX_PENDING_JOBS,
@@ -936,7 +978,9 @@ class JobManager:
             job["started"] = time.time()
             event = job["cancel_event"]
         try:
-            result = run_attestor(
+            result = (run_security_assessment(data, event)
+                      if data.get("mode") == "security-assessment"
+                      else run_attestor(
                 data.get("mode", "chat"), data.get("prompt", ""),
                 limit=_bounded_int(data.get("limit", 8), 8, 1, MAX_LIMIT),
                 timeout=data.get("timeout", DEFAULT_TIMEOUT),
@@ -957,7 +1001,7 @@ class JobManager:
                     data.get("cjp_apply_confirmed") is True),
                 cjp_preview_evidence_sha256=data.get(
                     "cjp_preview_evidence_sha256", ""),
-            )
+            ))
         except Exception as exc:  # keep malformed jobs observable and terminal
             result = {"ok": False, "code": 2,
                       "output": "Attestor job failed safely: %s" % type(exc).__name__,
@@ -966,7 +1010,9 @@ class JobManager:
         # broad local scope.  Per-run read consent must not silently become
         # durable path retention in the shared workbench history.  The CLI can
         # still persist a report when the operator explicitly supplies --out.
-        if data.get("mode") in {"computer41", "cjpcontrol", "escapelab"}:
+        if data.get("mode") == "security-assessment":
+            result["history_skipped"] = "Assessment reports are available for this server session; download to retain."
+        elif data.get("mode") in {"computer41", "cjpcontrol", "escapelab"}:
             result["history_skipped"] = (
                 "permissioned local-control and private escape-lab reports "
                 "are session-only")
@@ -1606,6 +1652,40 @@ class Handler(BaseHTTPRequestHandler):
             except (AttributeError, EvidenceStoreError, OSError, ValueError):
                 _json(self, 503, {"ok": False, "output": "Durable history is unavailable."})
             return
+        if path.startswith("/api/security/"):
+            if not self._authorized_get():
+                return
+            if self._reject_ambiguous_framing(body_expected=False):
+                return
+            if parsed_request.query:
+                _json(self, 400, {"ok": False, "output": "Assessment routes accept no query input."})
+                return
+            if path == "/api/security/status":
+                try:
+                    _json(self, 200, {"ok": True, **security_assessment.status()})
+                except (ValueError, OSError):
+                    _json(self, 503, {"ok": False, "output": "Local tool status is unavailable."})
+                return
+            parts = path.strip("/").split("/")
+            if (len(parts) == 6 and parts[:3] == ["api", "security", "jobs"]
+                    and parts[4] == "export" and parts[5] in {"json", "html"}):
+                job = self.server.jobs.get(parts[3])
+                report = ((job or {}).get("result") or {}).get("report")
+                if not isinstance(report, dict):
+                    _json(self, 404, {"ok": False, "output": "No completed assessment report for this job."})
+                    return
+                try:
+                    format_name = parts[5]
+                    body = (security_assessment.render_html(report) if format_name == "html"
+                            else json.dumps(report, ensure_ascii=False, indent=2)).encode("utf-8")
+                    _binary(self, 200, body,
+                            "text/html; charset=utf-8" if format_name == "html" else "application/json; charset=utf-8",
+                            "attestor-assessment-%s.%s" % (parts[3], format_name))
+                except (ValueError, TypeError, OSError):
+                    _json(self, 409, {"ok": False, "output": "Assessment report export is unavailable."})
+                return
+            _json(self, 404, {"ok": False, "output": "Unknown assessment route."})
+            return
         if path == "/api/history/compare":
             if not self._authorized_get():
                 return
@@ -1672,12 +1752,35 @@ class Handler(BaseHTTPRequestHandler):
         parsed_request = urlparse(self.path)
         path = parsed_request.path
         if path not in ("/api/run", "/api/jobs", "/api/triage", "/api/suppressions",
+                        "/api/security/plan", "/api/security/run",
                         "/api/blind-arena/start", "/api/blind-arena/reset"):
             self.send_error(404)
             return
         data = self._parse_json(
-            reject_duplicate_keys=path.startswith("/api/blind-arena/"))
+            reject_duplicate_keys=path.startswith(("/api/blind-arena/", "/api/security/")))
         if data is None:
+            return
+        if path.startswith("/api/security/"):
+            if parsed_request.query:
+                _json(self, 400, {"ok": False, "output": "Assessment actions accept no query input."})
+                return
+            try:
+                if path == "/api/security/plan":
+                    if not set(data).issubset({"targets", "ports", "label"}) or "targets" not in data:
+                        raise ValueError("Preview accepts targets, ports, and an optional report name.")
+                    plan = security_assessment.create_plan(
+                        targets=data["targets"], ports=data.get("ports", [80, 443]),
+                        label=data.get("label", ""))
+                    _json(self, 200, {"ok": True, "plan": plan})
+                    return
+                request = _security_run_request(data)
+                submitted = self.server.jobs.submit(request)
+                if submitted is None:
+                    _json(self, 429, {"ok": False, "output": "The job queue is full. Try again after a job finishes."})
+                else:
+                    _json(self, 202, submitted)
+            except (ValueError, TypeError, OSError) as exc:
+                _json(self, 400, {"ok": False, "output": str(exc)[:2000]})
             return
         if path.startswith("/api/blind-arena/"):
             if parsed_request.query:
@@ -1839,7 +1942,7 @@ def main(argv=None) -> int:
                     help="bounded local SQLite evidence-history path")
     args = ap.parse_args(argv)
 
-    missing_assets = [path for path in (INDEX, UI_SCRIPT, UI_STYLES) if not path.is_file()]
+    missing_assets = [path for path in (INDEX, UI_SCRIPT, UI_STYLES, PARTRIDGE_IMAGE) if not path.is_file()]
     if missing_assets:
         print("missing UI file(s): " + ", ".join(map(str, missing_assets)), file=sys.stderr)
         return 2

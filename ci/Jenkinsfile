@@ -1,0 +1,75 @@
+pipeline {
+    agent {
+        docker {
+            image 'attestor:4.4'
+            args '-v ${WORKSPACE}:/scan:ro'
+        }
+    }
+
+    environment {
+        ATTESTOR_API_KEY = credentials('attestor-api-key')
+    }
+
+    parameters {
+        choice(name: 'EFFORT', choices: ['medium', 'low', 'high', 'max'],
+               description: 'Scan depth')
+        booleanParam(name: 'FAIL_ON_CRITICAL', defaultValue: true,
+                     description: 'Fail build on CRITICAL findings')
+        string(name: 'SCAN_PATH', defaultValue: '.',
+               description: 'Path to scan (relative to workspace)')
+    }
+
+    stages {
+        stage('Security Scan') {
+            steps {
+                sh '''
+                    python /opt/attestor/detector/cli.py check /scan/${SCAN_PATH} \
+                        --effort ${EFFORT} --json > attestor-report.json
+                '''
+            }
+        }
+
+        stage('Compliance Report') {
+            steps {
+                sh '''
+                    python /opt/attestor/detector/cli.py compliance /scan/${SCAN_PATH} \
+                        --framework owasp --json > compliance-report.json
+                '''
+            }
+        }
+
+        stage('SBOM Generation') {
+            steps {
+                sh '''
+                    python /opt/attestor/detector/cli.py sbom /scan/${SCAN_PATH} \
+                        --format cyclonedx --json > sbom.json
+                '''
+            }
+        }
+
+        stage('Evaluate Results') {
+            steps {
+                script {
+                    def report = readJSON file: 'attestor-report.json'
+                    def criticals = 0
+                    if (report instanceof List) {
+                        criticals = report.count { it.severity == 'CRITICAL' }
+                    }
+                    echo "Found ${criticals} CRITICAL findings"
+                    if (params.FAIL_ON_CRITICAL && criticals > 0) {
+                        error("Build failed: ${criticals} CRITICAL security findings")
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: '*.json', fingerprint: true
+        }
+        failure {
+            echo 'Security scan found critical issues. Review attestor-report.json'
+        }
+    }
+}

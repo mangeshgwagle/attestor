@@ -1,0 +1,775 @@
+{
+  "overall": {
+    "f1": 0.256,
+    "fn": 1297,
+    "fp": 38,
+    "precision": 0.858,
+    "recall": 0.151,
+    "tn": 1489,
+    "tp": 230
+  },
+  "per_cwe": {
+    "CWE-114": {
+      "f1": 0.0,
+      "fn": 42,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 42,
+      "total": 84,
+      "tp": 0
+    },
+    "CWE-121": {
+      "f1": 0.0,
+      "fn": 38,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 38,
+      "total": 76,
+      "tp": 0
+    },
+    "CWE-122": {
+      "f1": 0.0,
+      "fn": 50,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 50,
+      "total": 100,
+      "tp": 0
+    },
+    "CWE-123": {
+      "f1": 0.0,
+      "fn": 42,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 42,
+      "total": 84,
+      "tp": 0
+    },
+    "CWE-124": {
+      "f1": 0.0,
+      "fn": 38,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 38,
+      "total": 76,
+      "tp": 0
+    },
+    "CWE-126": {
+      "f1": 0.0,
+      "fn": 38,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 38,
+      "total": 76,
+      "tp": 0
+    },
+    "CWE-127": {
+      "f1": 0.0,
+      "fn": 38,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 38,
+      "total": 76,
+      "tp": 0
+    },
+    "CWE-134": {
+      "f1": 0.667,
+      "fn": 0,
+      "fp": 38,
+      "precision": 0.5,
+      "recall": 1.0,
+      "tn": 0,
+      "total": 76,
+      "tp": 38
+    },
+    "CWE-15": {
+      "f1": 0.0,
+      "fn": 29,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 29,
+      "total": 58,
+      "tp": 0
+    },
+    "CWE-176": {
+      "f1": 0.0,
+      "fn": 29,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 29,
+      "total": 58,
+      "tp": 0
+    },
+    "CWE-188": {
+      "f1": 0.0,
+      "fn": 38,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 38,
+      "total": 76,
+      "tp": 0
+    },
+    "CWE-190": {
+      "f1": 0.914,
+      "fn": 6,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 0.842,
+      "tn": 38,
+      "total": 76,
+      "tp": 32
+    },
+    "CWE-191": {
+      "f1": 0.0,
+      "fn": 38,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 38,
+      "total": 76,
+      "tp": 0
+    },
+    "CWE-194": {
+      "f1": 0.0,
+      "fn": 42,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 42,
+      "total": 84,
+      "tp": 0
+    },
+    "CWE-195": {
+      "f1": 0.0,
+      "fn": 42,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 42,
+      "total": 84,
+      "tp": 0
+    },
+    "CWE-196": {
+      "f1": 0.0,
+      "fn": 20,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 20,
+      "total": 40,
+      "tp": 0
+    },
+    "CWE-197": {
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tn": 42,
+      "total": 84,
+      "tp": 42
+    },
+    "CWE-222": {
+      "f1": 0.0,
+      "fn": 19,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 19,
+      "total": 38,
+      "tp": 0
+    },
+    "CWE-223": {
+      "f1": 0.0,
+      "fn": 19,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 19,
+      "total": 38,
+      "tp": 0
+    },
+    "CWE-226": {
+      "f1": 0.0,
+      "fn": 50,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 50,
+      "total": 100,
+      "tp": 0
+    },
+    "CWE-23": {
+      "f1": 0.895,
+      "fn": 8,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 0.81,
+      "tn": 42,
+      "total": 84,
+      "tp": 34
+    },
+    "CWE-242": {
+      "f1": 0.0,
+      "fn": 20,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 20,
+      "total": 40,
+      "tp": 0
+    },
+    "CWE-244": {
+      "f1": 0.0,
+      "fn": 50,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 50,
+      "total": 100,
+      "tp": 0
+    },
+    "CWE-247": {
+      "f1": 0.0,
+      "fn": 19,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 19,
+      "total": 38,
+      "tp": 0
+    },
+    "CWE-252": {
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tn": 50,
+      "total": 100,
+      "tp": 50
+    },
+    "CWE-253": {
+      "f1": 0.0,
+      "fn": 50,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 50,
+      "total": 100,
+      "tp": 0
+    },
+    "CWE-256": {
+      "f1": 0.0,
+      "fn": 38,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 38,
+      "total": 76,
+      "tp": 0
+    },
+    "CWE-259": {
+      "f1": 0.0,
+      "fn": 42,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 42,
+      "total": 84,
+      "tp": 0
+    },
+    "CWE-272": {
+      "f1": 0.0,
+      "fn": 50,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 50,
+      "total": 100,
+      "tp": 0
+    },
+    "CWE-273": {
+      "f1": 0.0,
+      "fn": 37,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 37,
+      "total": 74,
+      "tp": 0
+    },
+    "CWE-284": {
+      "f1": 0.0,
+      "fn": 50,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 50,
+      "total": 100,
+      "tp": 0
+    },
+    "CWE-319": {
+      "f1": 0.0,
+      "fn": 38,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 38,
+      "total": 76,
+      "tp": 0
+    },
+    "CWE-321": {
+      "f1": 0.0,
+      "fn": 42,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 42,
+      "total": 84,
+      "tp": 0
+    },
+    "CWE-325": {
+      "f1": 0.0,
+      "fn": 50,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 50,
+      "total": 100,
+      "tp": 0
+    },
+    "CWE-327": {
+      "f1": 0.0,
+      "fn": 50,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 50,
+      "total": 100,
+      "tp": 0
+    },
+    "CWE-328": {
+      "f1": 0.0,
+      "fn": 50,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 50,
+      "total": 100,
+      "tp": 0
+    },
+    "CWE-338": {
+      "f1": 0.0,
+      "fn": 19,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 19,
+      "total": 38,
+      "tp": 0
+    },
+    "CWE-36": {
+      "f1": 0.895,
+      "fn": 8,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 0.81,
+      "tn": 42,
+      "total": 84,
+      "tp": 34
+    },
+    "CWE-364": {
+      "f1": 0.0,
+      "fn": 20,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 20,
+      "total": 40,
+      "tp": 0
+    },
+    "CWE-366": {
+      "f1": 0.0,
+      "fn": 38,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 38,
+      "total": 76,
+      "tp": 0
+    }
+  },
+  "per_rule": {
+    "JS-CRYPTO-DES": {
+      "f1": 0.0,
+      "fn": 50,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 50,
+      "total": 100,
+      "tp": 0
+    },
+    "JS-CRYPTO-MD5": {
+      "f1": 0.0,
+      "fn": 50,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 50,
+      "total": 100,
+      "tp": 0
+    },
+    "JS-CRYPTO-SHA1": {
+      "f1": 0.0,
+      "fn": 50,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 50,
+      "total": 100,
+      "tp": 0
+    },
+    "asm-legacy-int80": {
+      "f1": 0.0,
+      "fn": 42,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 42,
+      "total": 84,
+      "tp": 0
+    },
+    "c-buffer-underwrite": {
+      "f1": 0.0,
+      "fn": 38,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 38,
+      "total": 76,
+      "tp": 0
+    },
+    "c-heap-buffer-overflow": {
+      "f1": 0.0,
+      "fn": 50,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 50,
+      "total": 100,
+      "tp": 0
+    },
+    "c-integer-overflow": {
+      "f1": 0.914,
+      "fn": 6,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 0.842,
+      "tn": 38,
+      "total": 76,
+      "tp": 32
+    },
+    "c-memcmp-padding": {
+      "f1": 0.0,
+      "fn": 38,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 38,
+      "total": 76,
+      "tp": 0
+    },
+    "c-numeric-truncation": {
+      "f1": 0.833,
+      "fn": 12,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 0.714,
+      "tn": 42,
+      "total": 84,
+      "tp": 30
+    },
+    "c-path-traversal": {
+      "f1": 0.895,
+      "fn": 16,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 0.81,
+      "tn": 84,
+      "total": 168,
+      "tp": 68
+    },
+    "c-signed-size": {
+      "f1": 0.0,
+      "fn": 42,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 42,
+      "total": 84,
+      "tp": 0
+    },
+    "c-stack-buffer-overflow": {
+      "f1": 0.0,
+      "fn": 38,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 38,
+      "total": 76,
+      "tp": 0
+    },
+    "c-unchecked-return": {
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tn": 50,
+      "total": 100,
+      "tp": 50
+    },
+    "c-wrong-return-check": {
+      "f1": 0.0,
+      "fn": 50,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 50,
+      "total": 100,
+      "tp": 0
+    },
+    "cs-weak-hash": {
+      "f1": 0.0,
+      "fn": 50,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 50,
+      "total": 100,
+      "tp": 0
+    },
+    "cs-weak-random": {
+      "f1": 0.0,
+      "fn": 19,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 19,
+      "total": 38,
+      "tp": 0
+    },
+    "format-string": {
+      "f1": 0.871,
+      "fn": 1,
+      "fp": 10,
+      "precision": 0.787,
+      "recall": 0.974,
+      "tn": 28,
+      "total": 76,
+      "tp": 37
+    },
+    "hs-int-overflow": {
+      "f1": 0.0,
+      "fn": 38,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 38,
+      "total": 76,
+      "tp": 0
+    },
+    "insecure-http-url": {
+      "f1": 0.0,
+      "fn": 38,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 38,
+      "total": 76,
+      "tp": 0
+    },
+    "java-broken-cipher": {
+      "f1": 0.0,
+      "fn": 50,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 50,
+      "total": 100,
+      "tp": 0
+    },
+    "java-external-config": {
+      "f1": 0.0,
+      "fn": 29,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 29,
+      "total": 58,
+      "tp": 0
+    },
+    "java-format-string": {
+      "f1": 0.0,
+      "fn": 38,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 38,
+      "total": 76,
+      "tp": 0
+    },
+    "java-integer-overflow": {
+      "f1": 0.0,
+      "fn": 38,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 38,
+      "total": 76,
+      "tp": 0
+    },
+    "java-numeric-truncation": {
+      "f1": 0.0,
+      "fn": 42,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 42,
+      "total": 84,
+      "tp": 0
+    },
+    "java-path-traversal": {
+      "f1": 0.0,
+      "fn": 84,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 84,
+      "total": 168,
+      "tp": 0
+    },
+    "java-weak-hash": {
+      "f1": 0.0,
+      "fn": 100,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 100,
+      "total": 200,
+      "tp": 0
+    },
+    "java-weak-prng": {
+      "f1": 0.0,
+      "fn": 19,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 19,
+      "total": 38,
+      "tp": 0
+    },
+    "java-weak-random": {
+      "f1": 0.0,
+      "fn": 19,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 19,
+      "total": 38,
+      "tp": 0
+    },
+    "native-atoi": {
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tn": 42,
+      "total": 84,
+      "tp": 42
+    },
+    "native-format-string": {
+      "f1": 0.667,
+      "fn": 0,
+      "fp": 38,
+      "precision": 0.5,
+      "recall": 1.0,
+      "tn": 0,
+      "total": 76,
+      "tp": 38
+    },
+    "native-signed-overflow-check": {
+      "f1": 0.0,
+      "fn": 38,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 38,
+      "total": 76,
+      "tp": 0
+    },
+    "py-random-security": {
+      "f1": 0.0,
+      "fn": 19,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 19,
+      "total": 38,
+      "tp": 0
+    },
+    "signed-overflow-check": {
+      "f1": 0.0,
+      "fn": 38,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 38,
+      "total": 76,
+      "tp": 0
+    },
+    "unsigned-underflow": {
+      "f1": 0.0,
+      "fn": 38,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 38,
+      "total": 76,
+      "tp": 0
+    },
+    "weak-hash": {
+      "f1": 0.0,
+      "fn": 50,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 50,
+      "total": 100,
+      "tp": 0
+    },
+    "weak-rng": {
+      "f1": 0.0,
+      "fn": 19,
+      "fp": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 19,
+      "total": 38,
+      "tp": 0
+    }
+  }
+}

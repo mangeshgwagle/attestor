@@ -14,11 +14,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import random
 import sys
 import time
 
-sys.path.insert(0, __file__.rsplit("\\", 1)[0] if "\\" in __file__ else ".")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from offensive_fuzz42 import minimize  # noqa: E402
 
@@ -37,7 +38,7 @@ class _Budget(Exception):
     pass
 
 
-def execute_with_coverage(fn, data, allowed=(KeyboardInterrupt, SystemExit)):
+def execute_with_coverage(fn, data, allowed=(SystemExit,)):
     """Run fn(data) under a line tracer. Returns (covered_set, crash|None)."""
     covered = set()
 
@@ -90,7 +91,7 @@ def mutate(rng, data):
 
 
 def fuzz(fn, seeds=None, iterations=5000, seconds=30.0, seed_rng=0,
-         allowed=(KeyboardInterrupt, SystemExit)):
+         allowed=(SystemExit,)):
     deadline = time.monotonic() + seconds
     rng = random.Random(seed_rng)
     corpus = []
@@ -125,15 +126,15 @@ def fuzz(fn, seeds=None, iterations=5000, seconds=30.0, seed_rng=0,
         discoveries += gained
         if crash:
             small = minimize(candidate,
-                             lambda d: _raises(fn, d, allowed), allowed)
-            entry = {"input_hex": small.hex(),
-                     "corpus_generation": step, **crash}
-            if entry not in crashes:
-                crashes.append(entry)
+                             lambda d: _reraise(fn, d, allowed), allowed)
+            crash_hex = small.hex()
+            if crash_hex not in {c["input_hex"] for c in crashes}:
+                crashes.append({"input_hex": crash_hex,
+                                "corpus_generation": step, **crash})
     return {
         "schema": CG_SCHEMA,
         "tool": "coverage-fuzzer",
-        "iterations_run": step,
+        "iterations_run": step if iterations else 0,
         "stop_reason": stop_reason,
         "corpus_size": len(corpus),
         "lines_discovered_total": len(global_covered),
@@ -144,14 +145,12 @@ def fuzz(fn, seeds=None, iterations=5000, seconds=30.0, seed_rng=0,
     }
 
 
-def _raises(fn, data, allowed):
+def _reraise(fn, data, allowed):
+    """Re-run fn(data); if it crashes (not an allowed exception), re-raise."""
     try:
         fn(bytes(data))
-        return False
     except allowed:
-        return False
-    except Exception:
-        return True
+        pass
 
 
 def run_selftest():

@@ -7093,6 +7093,193 @@ def java_cross_file_taint(sources) -> frozenset:
     return CrossFileTaint(frozenset(received), frozenset(returned))
 
 
+# ---- Attestor 4.3: new detection rules for weak categories ---------------- #
+
+RULE_CWE.update({
+    "py-xss-reflected": "CWE-79",
+    "py-xss-template-unescaped": "CWE-79",
+    "py-ssrf": "CWE-918",
+    "py-path-traversal": "CWE-22",
+    "py-ssti": "CWE-1336",
+    "py-xxe": "CWE-611",
+    "py-csrf-missing": "CWE-352",
+    "py-crypto-weak-key": "CWE-326",
+    "py-hardcoded-iv": "CWE-329",
+    "py-jwt-none-alg": "CWE-345",
+    "py-mass-assignment": "CWE-915",
+})
+
+PY_XSS_REFLECTED = re.compile(
+    r"(?:return|response\s*=|Response\().*(?:request\."
+    r"(?:args|form|values|data|cookies|headers|get_json)"
+    r"|flask\.request|request\.GET|request\.POST)")
+
+@rule("py-xss-reflected", ("python",), "HIGH",
+      "user input rendered directly in HTTP response without escaping (reflected XSS)",
+      "escape output with markupsafe.escape() or use template auto-escaping; "
+      "never return raw request data in a response.")
+def r_py_xss(ctx):
+    for idx, line in enumerate(ctx.code):
+        if PY_XSS_REFLECTED.search(line):
+            if not re.search(r"escape\s*\(|bleach\.|sanitize|html\.escape", line):
+                yield _f(ctx, idx, "py-xss-reflected", "HIGH",
+                         "request data flows directly into the response without "
+                         "escaping, enabling reflected XSS.", r_py_xss.fix)
+
+@rule("py-xss-template-unescaped", ("python",), "HIGH",
+      "render_template_string() with user input (stored/reflected XSS via Jinja2)",
+      "use render_template() with a file-based template and Jinja2 auto-escaping; "
+      "never pass user input into render_template_string().")
+def r_py_xss_template(ctx):
+    for idx, line in enumerate(ctx.code):
+        if re.search(r"render_template_string\s*\(", line):
+            if re.search(r"request\.|user_input|data\[|\.format\(|f['\"]", line):
+                yield _f(ctx, idx, "py-xss-template-unescaped", "HIGH",
+                         "render_template_string() with dynamic content allows "
+                         "server-side template injection and XSS.", r_py_xss_template.fix)
+
+PY_SSRF_PATTERN = re.compile(
+    r"(?:requests\.(?:get|post|put|delete|head|patch|options)|"
+    r"urllib\.request\.(?:urlopen|urlretrieve|Request)|"
+    r"httpx\.(?:get|post|put|delete|AsyncClient)|"
+    r"aiohttp\.ClientSession)\s*\(")
+
+@rule("py-ssrf", ("python",), "HIGH",
+      "HTTP request with user-controlled URL (server-side request forgery)",
+      "validate and allowlist destination URLs; block internal IPs (127.0.0.1, "
+      "10.0.0.0/8, 169.254.169.254, etc.) and use a URL parser to check the host.")
+def r_py_ssrf(ctx):
+    for idx, line in enumerate(ctx.code):
+        if PY_SSRF_PATTERN.search(line):
+            if re.search(r"request\.|user_input|args\[|form\[|\.get\(|input\(", line):
+                if not re.search(r"allowlist|whitelist|validate_url|is_safe_url", line):
+                    yield _f(ctx, idx, "py-ssrf", "HIGH",
+                             "a user-controlled value reaches an HTTP client as the URL, "
+                             "allowing SSRF to internal services or cloud metadata.",
+                             r_py_ssrf.fix)
+
+@rule("py-path-traversal", ("python",), "HIGH",
+      "file operation with user-controlled path without validation (path traversal)",
+      "use os.path.realpath() and verify the resolved path starts with the "
+      "expected base directory; reject paths containing '..'.")
+def r_py_path_traversal(ctx):
+    file_ops = re.compile(
+        r"(?:open|Path)\s*\(.*(?:request\.|user_input|args\[|form\[|filename|"
+        r"\.get\(.['\"](?:path|file|name|dir))")
+    for idx, line in enumerate(ctx.code):
+        if file_ops.search(line):
+            if not re.search(r"realpath|abspath|secure_filename|resolve\(\)", line):
+                yield _f(ctx, idx, "py-path-traversal", "HIGH",
+                         "user input reaches a file open/path operation without "
+                         "path canonicalization, allowing directory traversal.",
+                         r_py_path_traversal.fix)
+
+@rule("py-ssti", ("python",), "CRITICAL",
+      "server-side template injection via dynamic template rendering",
+      "never pass user input to template engines as template source; use "
+      "render_template() with static template files.")
+def r_py_ssti(ctx):
+    for idx, line in enumerate(ctx.code):
+        if re.search(r"(?:Template|Environment)\s*\(.*(?:request\.|user|input|data\[)", line):
+            yield _f(ctx, idx, "py-ssti", "CRITICAL",
+                     "user input is used to construct a template object, allowing "
+                     "server-side template injection and remote code execution.",
+                     r_py_ssti.fix)
+        if re.search(r"render_template_string\s*\(\s*(?:request\.|user|input)", line):
+            yield _f(ctx, idx, "py-ssti", "CRITICAL",
+                     "render_template_string() with user input enables SSTI/RCE.",
+                     r_py_ssti.fix)
+
+@rule("py-xxe", ("python",), "HIGH",
+      "XML parsing without disabling external entities (XXE injection)",
+      "use defusedxml instead of xml.etree or lxml with resolve_entities=False; "
+      "disable DTD processing entirely.")
+def r_py_xxe(ctx):
+    for idx, line in enumerate(ctx.code):
+        if re.search(r"(?:etree\.parse|ET\.parse|minidom\.parse|sax\.parse"
+                     r"|etree\.fromstring|ET\.fromstring|lxml\.etree)", line):
+            if not re.search(r"defusedxml|resolve_entities\s*=\s*False|"
+                             r"XMLParser.*resolve_entities", line):
+                yield _f(ctx, idx, "py-xxe", "HIGH",
+                         "XML parsing without external entity restrictions allows "
+                         "XXE attacks (file disclosure, SSRF, DoS).", r_py_xxe.fix)
+
+@rule("py-csrf-missing", ("python",), "MEDIUM",
+      "state-changing route without CSRF protection",
+      "use Flask-WTF CSRFProtect or Django's @csrf_protect decorator; "
+      "ensure all POST/PUT/DELETE routes validate CSRF tokens.")
+def r_py_csrf(ctx):
+    for idx, line in enumerate(ctx.code):
+        if re.search(r"@\w+\.route\s*\([^)]*methods\s*=\s*\[.*(?:POST|PUT|DELETE)", line):
+            window = ctx.code[max(0, idx-5):idx+15]
+            window_text = "\n".join(window)
+            if not re.search(r"csrf|CSRFProtect|csrf_token|validate_csrf|"
+                             r"@csrf_protect|@csrf_exempt", window_text):
+                yield _f(ctx, idx, "py-csrf-missing", "MEDIUM",
+                         "this state-changing route has no visible CSRF protection; "
+                         "an attacker can forge requests from a victim's browser.",
+                         r_py_csrf.fix)
+
+@rule("py-crypto-weak-key", ("python",), "HIGH",
+      "RSA/DSA key generated with insufficient size",
+      "use at least 2048-bit RSA keys (4096 recommended) or switch to Ed25519/ECDSA.")
+def r_py_crypto_weak_key(ctx):
+    for idx, line in enumerate(ctx.code):
+        m = re.search(r"(?:generate_private_key|rsa\.generate|RSA\.generate)\s*\([^)]*?(\d+)", line)
+        if m:
+            bits = int(m.group(1))
+            if bits < 2048:
+                yield _f(ctx, idx, "py-crypto-weak-key", "HIGH",
+                         f"key size {bits} bits is below the 2048-bit minimum; "
+                         "keys this small can be factored.", r_py_crypto_weak_key.fix)
+
+@rule("py-hardcoded-iv", ("python",), "MEDIUM",
+      "hardcoded initialization vector in cryptographic operation",
+      "generate a random IV with os.urandom() for each encryption; a fixed IV "
+      "allows ciphertext comparison attacks.")
+def r_py_hardcoded_iv(ctx):
+    for idx, line in enumerate(ctx.code):
+        if re.search(r"(?:iv|IV|nonce)\s*=\s*b['\"]", line):
+            if re.search(r"AES|Cipher|encrypt|cipher", "\n".join(ctx.code[max(0,idx-3):idx+3])):
+                yield _f(ctx, idx, "py-hardcoded-iv", "MEDIUM",
+                         "a hardcoded IV/nonce means identical plaintexts produce "
+                         "identical ciphertexts, breaking semantic security.",
+                         r_py_hardcoded_iv.fix)
+
+@rule("py-jwt-none-alg", ("python",), "CRITICAL",
+      "JWT verification accepts 'none' algorithm (authentication bypass)",
+      "always specify algorithms=['HS256'] (or your expected algorithm) in "
+      "jwt.decode(); never allow the token to choose its own algorithm.")
+def r_py_jwt_none(ctx):
+    for idx, line in enumerate(ctx.code):
+        if re.search(r"jwt\.decode\s*\(", line):
+            if re.search(r"algorithms\s*=\s*\[.*['\"]none['\"]", line, re.I):
+                yield _f(ctx, idx, "py-jwt-none-alg", "CRITICAL",
+                         "accepting algorithm='none' lets an attacker forge tokens "
+                         "with no signature.", r_py_jwt_none.fix)
+            if not re.search(r"algorithms\s*=", line):
+                window = "\n".join(ctx.code[idx:idx+3])
+                if not re.search(r"algorithms\s*=", window):
+                    yield _f(ctx, idx, "py-jwt-none-alg", "CRITICAL",
+                             "jwt.decode() without specifying algorithms= accepts "
+                             "whatever the token claims, including 'none'.",
+                             r_py_jwt_none.fix)
+
+@rule("py-mass-assignment", ("python",), "MEDIUM",
+      "model created/updated from unfiltered request data (mass assignment)",
+      "explicitly list allowed fields; never pass request.form or request.json "
+      "directly to ORM constructors.")
+def r_py_mass_assignment(ctx):
+    for idx, line in enumerate(ctx.code):
+        if re.search(r"\.(?:create|update|filter_by|__init__)\s*\(\s*\*\*\s*request\."
+                     r"(?:json|form|data|args|values)", line):
+            yield _f(ctx, idx, "py-mass-assignment", "MEDIUM",
+                     "unpacking request data directly into a model allows an attacker "
+                     "to set unintended fields (e.g., is_admin=True).",
+                     r_py_mass_assignment.fix)
+
+
+
 def scan_project(files, deep: bool = False) -> list[Finding]:
     """Scan a group of files together, following taint between them.
 

@@ -32,7 +32,7 @@ import string
 from dataclasses import dataclass, field
 
 
-VERSION = "4.2"
+VERSION = "4.3"
 
 
 # --------------------------------------------------------------------------- #

@@ -56,7 +56,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 
-VERSION = "4.2"
+VERSION = "4.3"
 
 
 # =========================================================================== #
@@ -127,8 +127,12 @@ class EventBus:
     def subscribe(self, event_kind: str, callback: Callable[[Event], None]) -> None:
         self._subscribers[event_kind].append(callback)
 
+    _LOG_CAP = 10_000
+
     def publish(self, event: Event) -> None:
         self._log.append(event)
+        if len(self._log) > self._LOG_CAP:
+            self._log = self._log[-self._LOG_CAP:]
         for cb in self._subscribers.get(event.kind, []):
             cb(event)
         for cb in self._subscribers.get("*", []):
@@ -492,6 +496,12 @@ class KnowledgeStore:
             with open(patterns_path, "r", encoding="utf-8") as f:
                 for item in json.load(f):
                     dp = DetectionPattern(**item)
+                    try:
+                        re.compile(dp.regex, re.DOTALL)
+                    except re.error:
+                        continue
+                    if len(dp.regex) > 1024:
+                        continue
                     self._patterns[dp.pattern_id] = dp
 
         metrics_path = os.path.join(target, "metrics.json")

@@ -85,6 +85,33 @@ def _fix_loose_eq(line: str) -> str:
     line = re.sub(r"(?<![=!<>])!=(?!=)", "!==", line)
     return line
 
+# --- 4.3 fixers ---
+
+def _fix_xxe(line: str) -> str:
+    if "etree.parse" in line or "ET.parse" in line:
+        return line.replace("etree.parse", "defusedxml.ElementTree.parse").replace(
+            "ET.parse", "defusedxml.ElementTree.parse")
+    if "etree.fromstring" in line or "ET.fromstring" in line:
+        return line.replace("etree.fromstring", "defusedxml.ElementTree.fromstring").replace(
+            "ET.fromstring", "defusedxml.ElementTree.fromstring")
+    return line
+
+def _fix_subprocess_shell(line: str) -> str:
+    return re.sub(r"shell\s*=\s*True", "shell=False", line)
+
+def _fix_random_security(line: str) -> str:
+    return re.sub(r"\brandom\.(randint|choice|randrange|random)\b",
+                  r"secrets.SystemRandom().\1", line)
+
+def _fix_requests_no_timeout(line: str) -> str:
+    if "timeout" not in line:
+        return re.sub(r"(requests\.(?:get|post|put|delete|head|patch)\s*\([^)]*)\)",
+                      r"\1, timeout=30)", line)
+    return line
+
+def _fix_bind_all(line: str) -> str:
+    return line.replace("0.0.0.0", "127.0.0.1")
+
 
 # Rules safe to APPLY automatically (must match confidence.SAFE_AUTOFIX_RULES).
 SAFE_FIXERS = {
@@ -93,12 +120,17 @@ SAFE_FIXERS = {
     "weak-hash": _fix_weak_hash,
     "debug-enabled": _fix_debug,
     "tls-verify-disabled": _fix_tls_verify,
+    "py-xxe": _fix_xxe,
+    "py-subprocess-shell": _fix_subprocess_shell,
+    "py-requests-no-timeout": _fix_requests_no_timeout,
+    "py-bind-all-interfaces": _fix_bind_all,
 }
 
 # Rules whose fix changes semantics — PREVIEW ONLY unless --aggressive.
 SUGGESTED_FIXERS = {
     "py-yaml-load": _fix_yaml_load,
     "js-loose-equality": _fix_loose_eq,
+    "py-random-security": _fix_random_security,
 }
 
 

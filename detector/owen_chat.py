@@ -22,19 +22,69 @@ import sys
 import urllib.request
 from pathlib import Path
 
-CHAT_SCHEMA = "attestor-chat-4.2"
+CHAT_SCHEMA = "attestor-chat-4.3"
 OLLAMA = "http://127.0.0.1:11434"
 CODE_EXTS = {".py", ".js", ".ts", ".java", ".c", ".cpp", ".h", ".hpp",
-             ".go", ".rs", ".md", ".json", ".sql", ".sh", ".ps1", ".bat"}
+             ".go", ".rs", ".md", ".json", ".sql", ".sh", ".ps1", ".bat",
+             ".asm", ".s", ".rb", ".php", ".lua", ".zig", ".nim", ".kt",
+             ".swift", ".dart", ".r", ".jl", ".ml", ".hs", ".ex", ".sol"}
+
+# Import the model loader — the fine-tuned owen-coder-43 brain
+_MODEL_LOADER = None
+def _get_loader():
+    global _MODEL_LOADER
+    if _MODEL_LOADER is not None:
+        return _MODEL_LOADER
+    try:
+        loader_path = Path(__file__).resolve().parent / "model_loader43.py"
+        if loader_path.exists():
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("model_loader43", loader_path)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            _MODEL_LOADER = mod
+            return mod
+    except Exception:
+        pass
+    return None
 
 
-def chat_api(messages, model, base=OLLAMA):
+def chat_api(messages, model, base=OLLAMA, stream=False):
+    loader = _get_loader()
+    if loader:
+        backend = loader.get_model(prefer=model if model != "qwythos-9b" else None)
+        if backend.available():
+            strip = [m for m in messages if m["role"] != "system"]
+            answer = backend.chat(strip)
+            if stream:
+                sys.stdout.write(answer)
+                sys.stdout.flush()
+            return {"message": {"content": answer}}
+
+    # Fallback: direct Ollama API
+    sys_prompt = loader.SYSTEM_PROMPT if loader else (
+        "You are Owen Coder 4.3, a security-focused code analysis model.")
+    if not any(m["role"] == "system" for m in messages):
+        messages = [{"role": "system", "content": sys_prompt}] + messages
     request = urllib.request.Request(
         base + "/api/chat",
         data=json.dumps({"model": model, "messages": messages,
-                         "stream": False}).encode(),
+                         "stream": stream}).encode(),
         headers={"Content-Type": "application/json"}, method="POST")
-    with urllib.request.urlopen(request, timeout=600) as response:
+    if stream:
+        full = []
+        with urllib.request.urlopen(request, timeout=1800) as response:
+            for line in response:
+                try:
+                    chunk = json.loads(line.decode("utf-8"))
+                    token = chunk.get("message", {}).get("content", "")
+                    full.append(token)
+                    sys.stdout.write(token)
+                    sys.stdout.flush()
+                except json.JSONDecodeError:
+                    continue
+        return {"message": {"content": "".join(full)}}
+    with urllib.request.urlopen(request, timeout=1800) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -60,10 +110,18 @@ def dir_files(root, max_files):
     return out
 
 
-def repl(model, base=OLLAMA):
-    messages = []
+def repl(model, base=OLLAMA, stream=True):
+    loader = _get_loader()
+    backend_name = "ollama (fallback)"
+    if loader:
+        backend = loader.get_model(prefer=model if model != "qwythos-9b" else None)
+        if backend.available():
+            backend_name = f"{backend.name}: {backend.model_id}"
+    messages = [{"role": "system", "content":
+                 loader.SYSTEM_PROMPT if loader else "You are Owen Coder 4.3."}]
     attach = ""
-    print("owen_chat -- model: %s | /help for commands" % model)
+    print("owen_chat 4.3 -- backend: %s | /help for commands" % backend_name)
+    print("  capabilities: code, math, security, reasoning")
     while True:
         try:
             line = input("chat> ").strip()
@@ -76,17 +134,34 @@ def repl(model, base=OLLAMA):
         if line == "/exit":
             break
         if line == "/clear":
-            messages = []
+            loader = _get_loader()
+            messages = [{"role": "system", "content":
+                         loader.SYSTEM_PROMPT if loader else "You are Owen Coder 4.3."}]
             print("conversation cleared.")
             continue
         if line == "/help":
             print("/model NAME | /file PATH | /dir PATH [--max N] | "
-                  "/zip PATH.ZIP [--max N] | /clear | /exit")
+                  "/zip PATH.ZIP [--max N] | /stream | /nostream | "
+                  "/reason PROMPT | /code PROMPT | /math EXPR | /clear | /exit")
             continue
         if line.startswith("/model "):
             model = line.split(None, 1)[1].strip()
             print("model ->", model)
             continue
+        if line == "/stream":
+            stream = True
+            print("streaming: ON")
+            continue
+        if line == "/nostream":
+            stream = False
+            print("streaming: OFF")
+            continue
+        if line.startswith("/reason "):
+            line = "Think step by step, then answer:\n\n" + line[8:]
+        if line.startswith("/code "):
+            line = "Write complete, runnable code for:\n\n" + line[6:]
+        if line.startswith("/math "):
+            line = "Solve this math problem step by step:\n\n" + line[6:]
 
         if line.startswith("/file "):
             path = line.split(None, 1)[1].strip()
@@ -150,38 +225,61 @@ def repl(model, base=OLLAMA):
                          "content": (attach + "\n\n" + line).strip()})
         attach = ""
         try:
-            result = chat_api(messages, model, base)
+            if stream:
+                print("\nowen>")
+            result = chat_api(messages, model, base, stream=stream)
             answer = result["message"]["content"]
         except Exception as exc:  # noqa: BLE001
             print("error:", str(exc)[:200])
             messages.pop()
             continue
         messages.append({"role": "assistant", "content": answer})
-        print("\ndolphin>\n" + answer + "\n")
+        if not stream:
+            print("\nowen>\n" + answer + "\n")
+        else:
+            print("\n")
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        prog="owen_chat", description="Your console to the local brain")
-    parser.add_argument("--model", default="dolphin3:8b")
+        prog="owen_chat", description="Owen Coder — chat, code, math, security")
+    parser.add_argument("--model", default="qwythos-9b")
     parser.add_argument("--base", default=OLLAMA)
+    parser.add_argument("--no-stream", action="store_true")
+    parser.add_argument("prompt", nargs="*", help="One-shot prompt (non-interactive)")
     args = parser.parse_args(argv)
 
+    loader = _get_loader()
+    _sys = loader.SYSTEM_PROMPT if loader else "You are Owen Coder 4.3."
+
+    if args.prompt:
+        prompt = " ".join(args.prompt)
+        messages = [{"role": "system", "content": _sys},
+                    {"role": "user", "content": prompt}]
+        try:
+            result = chat_api(messages, args.model, args.base,
+                              stream=not args.no_stream)
+            if args.no_stream:
+                print(result["message"]["content"])
+        except Exception as exc:
+            print("error:", str(exc)[:200])
+        return 0
+
     if not sys.stdin.isatty():
-        # piped mode: each non-empty line is a prompt, /commands work
         for line in sys.stdin:
             line = line.strip()
             if not line:
                 continue
-            messages = [{"role": "user", "content": line}]
+            messages = [{"role": "system", "content": _sys},
+                        {"role": "user", "content": line}]
             try:
                 result = chat_api(messages, args.model, args.base)
-                print("dolphin>", result["message"]["content"])
-            except Exception as exc:  # noqa: BLE001
+                print("owen>", result["message"]["content"])
+            except Exception as exc:
                 print("error:", str(exc)[:200])
         return 0
 
-    repl(args.model, args.base)
+    repl(args.model, args.base, stream=not args.no_stream)
     return 0
 
 

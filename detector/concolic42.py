@@ -90,15 +90,19 @@ def extract_constraints(fn):
                 _is_data(left.args[0]) and \
                 isinstance(right, ast.Constant) and \
                 isinstance(right.value, int):
-            if isinstance(op, ast.Lt) or isinstance(op, ast.LtE):
+            if isinstance(op, ast.Lt):
                 record("len_lt", n=int(right.value))
-            elif isinstance(op, ast.Gt) or isinstance(op, ast.GtE):
+            elif isinstance(op, ast.LtE):
+                record("len_lt", n=int(right.value) + 1)
+            elif isinstance(op, ast.Gt):
+                record("len_ge", n=int(right.value) + 1)
+            elif isinstance(op, ast.GtE):
                 record("len_ge", n=int(right.value))
             continue
 
         if isinstance(left, ast.Call) and \
                 isinstance(left.func, ast.Attribute) and \
-                left.func.attr == "startswith" and _is_data(left.value) \
+                left.func.attr == "startswith" and _is_data(left.func.value) \
                 and left.args and isinstance(left.args[0], ast.Constant):
             prefix = prefix_of(left.args[0])
             if prefix is not None:

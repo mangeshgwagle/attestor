@@ -65,7 +65,7 @@ REVOCATION_SCHEMA = "attestor.trusted-access-revocations/4.2"
 CHALLENGE_SCHEMA = "attestor.trusted-access-challenge/4.2"
 AUDIT_SCHEMA = "attestor.trusted-access-audit/4.2"
 DECISION_SCHEMA = "attestor.trusted-access-decision/4.2"
-VERSION = "4.2"
+VERSION = "4.3"
 ALGORITHM = "hmac-sha256"
 
 MIN_KEY_BYTES = 32
@@ -75,7 +75,11 @@ SCOPE_PATTERN = re.compile(r"[a-z0-9_]+:[a-z0-9_]+")
 RESOURCE_PATTERN = re.compile(r"[A-Za-z0-9_.:@/+*-]{1,512}")
 DIGEST_PATTERN = re.compile(r"[0-9a-f]{64}")
 FUTURE_SKEW = _datetime.timedelta(minutes=5)
+CHALLENGE_MAX_AGE = _datetime.timedelta(minutes=5)
+_NONCE_CAP = 10_000
 GENESIS = "0" * 64
+
+_used_nonces: set[str] = set()
 
 sys.dont_write_bytecode = True
 
@@ -231,8 +235,12 @@ def _resource_covers(granted: str, requested: str) -> bool:
 
     Exact match, or a single trailing `/*` prefix. A bare `*` never reaches
     here -- it is refused at issue time -- so there is no way to widen a grant
-    to everything.
+    to everything. Traversal components (`.` and `..`) in the requested
+    resource are rejected so a grant for `project:teamA/repo-x/*` cannot be
+    widened to `project:teamA/repo-x/../../teamB/secrets`.
     """
+    if "/.." in requested or "/../" in requested or requested.endswith("/.."):
+        return False
     if granted == requested:
         return True
     if granted.endswith("/*"):
@@ -375,6 +383,11 @@ def decide(*, grant: Any, resource: str, scope: str, challenge: Mapping[str, Any
             return _deny("grant has expired", **common)
 
         # 3. Revocation, enforced before any allow.
+        if revocations is None:
+            import warnings
+            warnings.warn("decide() called without a revocation list; "
+                          "grant revocations are not enforced",
+                          stacklevel=2)
         if revocations is not None:
             try:
                 _signature_ok(revocations, authority_keys)
@@ -399,9 +412,22 @@ def decide(*, grant: Any, resource: str, scope: str, challenge: Mapping[str, Any
             return _deny("challenge is missing or malformed", **common)
         if challenge.get("resource") != req_resource or challenge.get("scope") != req_scope:
             return _deny("challenge does not bind this exact request", **common)
+        challenge_nonce = challenge.get("nonce")
+        if not isinstance(challenge_nonce, str) or not challenge_nonce:
+            return _deny("challenge nonce is missing", **common)
+        if challenge_nonce in _used_nonces:
+            return _deny("challenge nonce has already been consumed (replay)", **common)
+        challenge_issued = _parse_time(challenge.get("issued_at"), "challenge issued_at")
+        if challenge_issued > current + FUTURE_SKEW:
+            return _deny("challenge is not yet valid", **common)
+        if current - challenge_issued > CHALLENGE_MAX_AGE:
+            return _deny("challenge has expired", **common)
         expected_proof = prove_possession(bytes(subject_key), challenge)
         if not isinstance(subject_proof, str) or not hmac.compare_digest(expected_proof, subject_proof):
             return _deny("proof of possession failed", **common)
+        if len(_used_nonces) >= _NONCE_CAP:
+            _used_nonces.clear()
+        _used_nonces.add(challenge_nonce)
 
         # 5. Least privilege: the concrete request must sit inside the grant.
         if not _resource_covers(granted_resource, req_resource):
@@ -429,6 +455,11 @@ class AuditLog:
     denies -- a denial is exactly the event a reviewer most wants to see.
     """
     records: list[dict[str, Any]] = field(default_factory=list)
+    _signing_key: bytes | None = field(default=None, repr=False)
+
+    def __init__(self, signing_key: bytes | None = None):
+        self.records = []
+        self._signing_key = signing_key
 
     def append(self, decision: AccessDecision) -> dict[str, Any]:
         prev = self.records[-1]["record_sha256"] if self.records else GENESIS
@@ -440,6 +471,10 @@ class AuditLog:
             "event": decision.audit_body(),
         }
         body["record_sha256"] = _sha(body)
+        if self._signing_key:
+            body["record_hmac"] = hmac.new(
+                self._signing_key, _canonical(body).encode(),
+                hashlib.sha256).hexdigest()
         self.records.append(body)
         return body
 
@@ -453,10 +488,20 @@ class AuditLog:
             if record.get("prev_sha256") != prev:
                 errors.append("record %d does not chain to its predecessor" % index)
                 break
-            body = {key: value for key, value in record.items() if key != "record_sha256"}
+            body = {key: value for key, value in record.items()
+                    if key not in ("record_sha256", "record_hmac")}
             if record.get("record_sha256") != _sha(body):
                 errors.append("record %d digest does not match its contents" % index)
                 break
+            if self._signing_key and "record_hmac" in record:
+                check_body = {k: v for k, v in record.items()
+                              if k != "record_hmac"}
+                expected = hmac.new(
+                    self._signing_key, _canonical(check_body).encode(),
+                    hashlib.sha256).hexdigest()
+                if not hmac.compare_digest(record["record_hmac"], expected):
+                    errors.append("record %d HMAC verification failed" % index)
+                    break
             prev = record["record_sha256"]
         return not errors, errors
 

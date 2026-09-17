@@ -30,7 +30,7 @@ from __future__ import annotations
 import mc_asm
 
 SCHEMA = "attestor.mc_asm-piet/1.0"
-VERSION = "4.2"
+VERSION = "4.3"
 
 # Six hues x three lightnesses, then the two achromatic codels. Index is
 # (hue, lightness); hue cycles red -> yellow -> green -> cyan -> blue ->

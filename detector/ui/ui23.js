@@ -68,6 +68,7 @@
     fixmemory: 'No target required.'
   };
   const VIEW_COPY = {
+    assessment: ['SERVICE SECURITY', 'Security assessment', 'Preview a bounded assessment, review findings, and download the evidence.'],
     overview: ['ENGINEERING + SECURITY', 'Overview', 'Evidence-bound engineering and security posture from the latest local analysis.'],
     scan: ['ANALYSIS', 'New scan', 'Configure and monitor a bounded Attestor job.'],
     research: ['PUBLIC-WEB EVIDENCE', 'Research', 'Inspect citations, sources, disagreement signals, and coverage gaps.'],
@@ -177,7 +178,8 @@
     request: null, record: null, structured: null, research: null, findings: [], attackPaths: [], improvements: [],
     verifiedVariant: null, parseTruncated: false, page: 1,
     history: [], annotations: new Map(), selectedFinding: null, drawerReturnFocus: null,
-    blindArenaPollTimer: 0, blindArenaSnapshot: null
+    blindArenaPollTimer: 0, blindArenaSnapshot: null,
+    assessment: {plan: null, busy: false, jobId: '', reportJobId: '', report: null}
   };
 
   function safeInteger(value, fallback, minimum, maximum) {
@@ -242,6 +244,217 @@
     catch (_error) { throw new Error('The local server returned a non-JSON response (' + response.status + ').'); }
     if (!response.ok) throw new Error(data.output || ('HTTP ' + response.status));
     return data;
+  }
+
+  function assessmentError(message = '') {
+    byId('assessmentError').textContent = message;
+    byId('assessmentError').hidden = !message;
+  }
+
+  function assessmentStep(name) {
+    ['Target', 'Preview', 'Results'].forEach(step => {
+      const item = byId('assessmentStep' + step);
+      item.classList.toggle('current', step === name);
+      if (step === name) item.setAttribute('aria-current', 'step');
+      else item.removeAttribute('aria-current');
+    });
+  }
+
+  function setAssessmentBusy(busy, label) {
+    const current = state.assessment;
+    current.busy = busy;
+    ['assessmentTargets', 'assessmentPorts', 'assessmentLabel', 'assessmentPreviewBtn'].forEach(id => {
+      byId(id).disabled = busy || !state.token;
+    });
+    byId('assessmentAuthorized').disabled = busy;
+    byId('assessmentRunBtn').disabled = busy || !current.plan || !byId('assessmentAuthorized').checked;
+    byId('assessmentCancelBtn').hidden = !current.jobId;
+    byId('assessmentState').textContent = label;
+  }
+
+  function invalidateAssessmentPreview() {
+    if (state.assessment.busy) return;
+    state.assessment.plan = null;
+    byId('assessmentAuthorized').checked = false;
+    byId('assessmentPlan').hidden = true;
+    byId('assessmentPreviewEmpty').hidden = false;
+    byId('assessmentPreviewHint').textContent = 'Your targets and planned checks will appear here.';
+    byId('assessmentProgress').textContent = '';
+    assessmentStep('Target');
+    setAssessmentBusy(false, 'Ready');
+  }
+
+  async function refreshAssessmentStatus() {
+    try {
+      const data = await api('/api/security/status');
+      const msf = isObject(data.metasploit) ? data.metasploit : {};
+      byId('assessmentToolStatus').textContent = msf.available ? 'Metasploit detected' : 'Built-in checks ready';
+      byId('assessmentToolStatus').title = msf.available ? safeText(msf.version, 'Metasploit is installed') : 'Local Metasploit installation was not detected.';
+    } catch (_error) { byId('assessmentToolStatus').textContent = 'Tool status unavailable'; }
+    setAssessmentBusy(false, state.token ? 'Ready' : 'Offline');
+  }
+
+  async function previewAssessment(event) {
+    if (event) event.preventDefault();
+    if (state.assessment.busy || !state.token) return;
+    assessmentError();
+    const targets = byId('assessmentTargets').value.split(/\r?\n/).map(value => value.trim()).filter(Boolean);
+    const rawPorts = byId('assessmentPorts').value.trim();
+    if (rawPorts && !/^\d+(?:\s*,\s*\d+)*$/.test(rawPorts)) {
+      assessmentError('Enter comma-separated TCP port numbers, such as 80,443.'); return;
+    }
+    const ports = rawPorts ? rawPorts.split(',').map(value => Number(value.trim())) : [];
+    if (!targets.length) { assessmentError('Enter at least one exact target address.'); return; }
+    if (targets.length > 8 || ports.length > 16) {
+      assessmentError('Each assessment supports up to 8 targets and 16 TCP ports.'); return;
+    }
+    invalidateAssessmentPreview();
+    setAssessmentBusy(true, 'Preparing preview');
+    try {
+      const data = await api('/api/security/plan', {method: 'POST', body: JSON.stringify({
+        targets, ports, label: byId('assessmentLabel').value.trim()
+      })});
+      const plan = data.plan;
+      if (!isObject(plan) || typeof plan.sha256 !== 'string' || !Array.isArray(plan.checks)) {
+        throw new Error('The server returned an incomplete assessment preview.');
+      }
+      state.assessment.plan = plan;
+      byId('assessmentPlan').hidden = false;
+      byId('assessmentPreviewEmpty').hidden = true;
+      byId('assessmentPreviewHint').textContent = 'Review these checks, then start when you are ready.';
+      byId('assessmentPlanSummary').textContent = targets.length + ' target(s) · ' + plan.checks.length + ' planned checks' +
+        (plan.max_requests ? ' · up to ' + safeText(plan.max_requests) + ' requests' : '') +
+        (plan.max_seconds ? ' · ' + safeText(plan.max_seconds) + 's overall limit' : '') +
+        (plan.timeout_seconds ? ' · ' + safeText(plan.timeout_seconds) + 's per check' : '') + '. Preview valid for one hour.';
+      const checks = byId('assessmentChecks'); checks.replaceChildren();
+      plan.checks.slice(0, 128).forEach(check => {
+        const row = document.createElement('li');
+        row.textContent = typeof check === 'string' ? check : safeText(check.description,
+          [check.kind || check.type || 'Check', check.target || check.url || check.host || '', check.port || ''].filter(Boolean).join(' · '));
+        checks.appendChild(row);
+      });
+      assessmentStep('Preview');
+    } catch (error) { assessmentError(error.message); }
+    finally { setAssessmentBusy(false, state.assessment.plan ? 'Preview ready' : 'Ready'); }
+  }
+
+  function renderAssessmentReport(report, jobId) {
+    state.assessment.report = report;
+    state.assessment.reportJobId = jobId;
+    const findings = Array.isArray(report.findings) ? report.findings : [];
+    const checks = Array.isArray(report.checks) ? report.checks : [];
+    const audit = Array.isArray(report.audit) ? report.audit : [];
+    byId('assessmentResults').hidden = false;
+    byId('assessmentResultSummary').textContent = safeText(report.status, 'Finished') + ' · ' + findings.length +
+      ' finding(s) · ' + checks.length + ' check result(s). Findings describe observed configuration and exposure.';
+    const list = byId('assessmentFindings'); list.replaceChildren();
+    if (!findings.length) {
+      const empty = document.createElement('p');
+      empty.textContent = 'No findings were reported. Review the check results for skipped, failed, or incomplete checks.';
+      list.appendChild(empty);
+    }
+    findings.slice(0, 512).forEach(finding => {
+      const card = document.createElement('article');
+      const heading = document.createElement('h4');
+      heading.textContent = safeText(finding.severity, 'INFO').toUpperCase() + ' · ' + safeText(finding.title || finding.message, 'Observation');
+      card.appendChild(heading);
+      const target = document.createElement('p'); target.textContent = safeText(finding.target || finding.url || finding.host);
+      card.appendChild(target);
+      if (finding.evidence) {
+        const evidence = document.createElement('pre');
+        evidence.textContent = safeText(finding.evidence, '', 12000); card.appendChild(evidence);
+      }
+      if (finding.recommendation || finding.remediation) {
+        const recommendation = document.createElement('p');
+        recommendation.textContent = safeText(finding.recommendation || finding.remediation, '', 6000); card.appendChild(recommendation);
+      }
+      list.appendChild(card);
+    });
+    byId('assessmentEvidence').textContent = JSON.stringify({checks, audit, limitations: report.limitations || []}, null, 2).slice(0, MAX_RAW_PREVIEW);
+    assessmentStep('Results');
+  }
+
+  async function runAssessment() {
+    const current = state.assessment;
+    if (current.busy || !current.plan || !byId('assessmentAuthorized').checked) return;
+    assessmentError();
+    setAssessmentBusy(true, 'Starting');
+    byId('assessmentProgress').textContent = 'Submitting the checks shown in your preview…';
+    try {
+      const job = await api('/api/security/run', {method: 'POST', body: JSON.stringify({
+        plan: current.plan, confirm_sha256: current.plan.sha256, authorized: true
+      })});
+      current.jobId = job.id;
+      const runningId = job.id;
+      byId('assessmentCancelBtn').disabled = false;
+      setAssessmentBusy(true, 'Queued');
+      let failures = 0;
+      while (current.jobId === runningId) {
+        let snapshot;
+        try { snapshot = await api('/api/jobs/' + encodeURIComponent(runningId)); failures = 0; }
+        catch (error) {
+          failures += 1;
+          if (failures >= 5) throw error;
+          byId('assessmentProgress').textContent = 'Connection interrupted. Reconnecting to the running assessment…';
+          await delay(1500); continue;
+        }
+        if (current.jobId !== runningId) return;
+        byId('assessmentState').textContent = safeText(snapshot.status);
+        byId('assessmentProgress').textContent = safeText(snapshot.status) + ' · ' + Math.round((snapshot.elapsed_ms || 0) / 1000) + 's elapsed';
+        if (['done', 'failed', 'cancelled'].includes(snapshot.status)) {
+          const result = snapshot.result || {};
+          if (isObject(result.report)) renderAssessmentReport(result.report, runningId);
+          else if (snapshot.status !== 'cancelled') throw new Error(result.output || 'The assessment did not produce a report.');
+          current.jobId = '';
+          byId('assessmentAuthorized').checked = false;
+          toast(snapshot.status === 'cancelled' ? 'Assessment stopped.' : 'Assessment finished.');
+          setAssessmentBusy(false, snapshot.status === 'cancelled' ? 'Stopped' : 'Finished');
+          return;
+        }
+        await delay(700);
+      }
+    } catch (error) {
+      assessmentError(error.message + (current.jobId ? ' The assessment may still be running. Use Stop to cancel it.' : ''));
+      setAssessmentBusy(Boolean(current.jobId), current.jobId ? 'Connection interrupted' : 'Ready');
+    }
+  }
+
+  async function cancelAssessment() {
+    const current = state.assessment;
+    if (!current.jobId) return;
+    byId('assessmentCancelBtn').disabled = true;
+    try {
+      await api('/api/jobs/' + encodeURIComponent(current.jobId), {method: 'DELETE'});
+      byId('assessmentProgress').textContent = 'Stopping after the current bounded check…';
+      // A fresh monitor also recovers a job whose earlier polling lost its connection.
+      const cancelledId = current.jobId;
+      while (current.jobId === cancelledId) {
+        const snapshot = await api('/api/jobs/' + encodeURIComponent(cancelledId));
+        if (current.jobId !== cancelledId) return;
+        if (['done', 'failed', 'cancelled'].includes(snapshot.status)) {
+          if (isObject(snapshot.result && snapshot.result.report)) renderAssessmentReport(snapshot.result.report, cancelledId);
+          current.jobId = ''; byId('assessmentAuthorized').checked = false;
+          setAssessmentBusy(false, snapshot.status === 'done' ? 'Finished' : 'Stopped');
+          return;
+        }
+        await delay(700);
+      }
+    } catch (error) { assessmentError(error.message); }
+    finally { byId('assessmentCancelBtn').disabled = false; }
+  }
+
+  async function exportAssessment(format) {
+    if (!state.assessment.reportJobId) return;
+    try {
+      const response = await fetch('/api/security/jobs/' + encodeURIComponent(state.assessment.reportJobId) + '/export/' + format,
+        {headers: {'X-Attestor-Token': state.token}, credentials: 'same-origin'});
+      if (!response.ok) throw new Error('Report export failed. The server may have restarted or expired this job.');
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a'); link.href = url;
+      link.download = 'attestor-assessment-' + state.assessment.reportJobId + '.' + format;
+      document.body.appendChild(link); link.click(); link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) { assessmentError(error.message); }
   }
 
   function severityClass(severity) { return (severity || 'INFO').toLowerCase(); }
@@ -2253,10 +2466,12 @@
       if (style && Array.from(elements.responseStyle.options).some(option => option.value === style)) elements.responseStyle.value = style;
       applyVersionCapabilities(); await refreshHistory();
       await refreshBlindArenaStatus(false); setRunning(false, 'Idle');
+      await refreshAssessmentStatus();
     } catch (error) {
       state.token = ''; elements.serverDot.className = 'status-dot bad'; elements.connectionLabel.textContent = 'Offline';
       elements.detectorPath.textContent = 'Unavailable'; setRunning(false, 'Offline');
       blindArenaUnavailable('The secured local session is offline.'); showScanError(error.message);
+      setAssessmentBusy(false, 'Offline');
     }
   }
 
@@ -2274,6 +2489,15 @@
   elements.menuBtn.addEventListener('click', openSidebar); byId('sidebarClose').addEventListener('click', closeSidebar); elements.sidebarBackdrop.addEventListener('click', closeSidebar);
   elements.themeBtn.addEventListener('click', () => applyTheme(document.body.dataset.theme === 'dark' ? 'light' : 'dark'));
   elements.scanForm.addEventListener('submit', submitScan); elements.cancelBtn.addEventListener('click', cancelJob);
+  byId('assessmentForm').addEventListener('submit', previewAssessment);
+  byId('assessmentRunBtn').addEventListener('click', runAssessment);
+  byId('assessmentCancelBtn').addEventListener('click', cancelAssessment);
+  byId('assessmentAuthorized').addEventListener('change', () => {
+    byId('assessmentRunBtn').disabled = state.assessment.busy || !state.assessment.plan || !byId('assessmentAuthorized').checked;
+  });
+  ['assessmentTargets', 'assessmentPorts', 'assessmentLabel'].forEach(id => byId(id).addEventListener('input', invalidateAssessmentPreview));
+  byId('assessmentExportHtmlBtn').addEventListener('click', () => exportAssessment('html'));
+  byId('assessmentExportJsonBtn').addEventListener('click', () => exportAssessment('json'));
   elements.blindArenaStartBtn.addEventListener('click', startBlindArena);
   elements.blindArenaStatusBtn.addEventListener('click', () => refreshBlindArenaStatus(true));
   elements.blindArenaCancelBtn.addEventListener('click', cancelBlindArena);
@@ -2316,7 +2540,11 @@
   byId('exportSarifBtn').addEventListener('click', exportSarif);
   document.addEventListener('keydown', event => {
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName);
-    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); submitScan(); return; }
+    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+      event.preventDefault();
+      if (state.view === 'assessment') previewAssessment(); else submitScan();
+      return;
+    }
     if (event.key === '/' && !typing && state.view === 'findings') { event.preventDefault(); elements.resultSearch.focus(); return; }
     if (event.altKey && ['1', '2', '3', '4', '5', '6', '7'].includes(event.key)) {
       event.preventDefault(); setView(['overview', 'scan', 'findings', 'attacks', 'improvements', 'compare', 'history'][Number(event.key) - 1], true); return;

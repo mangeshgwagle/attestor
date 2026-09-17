@@ -47,7 +47,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, Sequence
 
-VERSION = "4.2"
+VERSION = "4.3"
 AUDIT_SCHEMA = "attestor-emergency-audit/4.2"
 PLAN_SCHEMA = "attestor-emergency-plan/4.2"
 

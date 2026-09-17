@@ -44,9 +44,11 @@ class RnError(ValueError):
     pass
 
 
+MAX_CIDR_HOSTS = 1024
+
+
 def expand_targets(targets):
-    """Lazy generator: hosts stream one at a time, nothing materializes,
-    so even a /8 simply takes as long as it takes."""
+    """Lazy generator: hosts stream one at a time."""
     for raw in targets:
         text = raw.strip()
         if not text:
@@ -55,6 +57,9 @@ def expand_targets(targets):
             network = ipaddress.ip_network(text, strict=False)
         except ValueError as exc:
             raise RnError("bad target %r: %s" % (text, exc)) from None
+        if network.num_addresses > MAX_CIDR_HOSTS:
+            raise RnError("target %r exceeds %d-host CIDR cap (has %d)"
+                          % (text, MAX_CIDR_HOSTS, network.num_addresses))
         for addr in network:
             if addr.version == 4:
                 yield str(addr)
@@ -123,7 +128,7 @@ def scan_host(host, ports, timeout, workers, do_banner):
             work.task_done()
 
     threads = [threading.Thread(target=worker, daemon=True)
-               for _ in range(max(1, workers))]
+               for _ in range(max(1, min(workers, 256)))]
     for thread in threads:
         thread.start()
     for thread in threads:
@@ -174,13 +179,13 @@ def run_selftest():
                    closed_port_report["open_count"] == 0))
 
     try:
-        expand_targets(["10.0.0.0/15"])
+        list(expand_targets(["10.0.0.0/15"]))
         checks.append(("oversized cidr refused", False))
     except RnError:
         checks.append(("oversized cidr refused", True))
 
     checks.append(("common ports bounded",
-                   len(expand_ports("common")) <= 0))
+                   len(expand_ports("common")) > 0))
     failed = [name for name, ok in checks if not ok]
     return {
         "schema": RN_SCHEMA,
@@ -201,16 +206,13 @@ def main(argv=None):
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT)
     parser.add_argument("--workers", type=int, default=32)
     parser.add_argument("--no-banner", action="store_true")
-    subs_ok = "--selftest" in sys.argv
-    args = parser.parse_args(
-        [a for a in argv if a != "--format"] if argv else None)
+    parser.add_argument("--format", choices=["text", "json"], default="json",
+                        dest="output_format")
+    parser.add_argument("--selftest", action="store_true")
+    args = parser.parse_args(argv)
+    output_format = args.output_format
 
-    fmt_index = sys.argv.index("--format") if "--format" in sys.argv else None
-    output_format = (sys.argv[fmt_index + 1]
-                     if fmt_index and fmt_index + 1 < len(sys.argv)
-                     else "json")
-
-    if subs_ok:
+    if args.selftest:
         result = run_selftest()
         print(json.dumps(result, indent=2, sort_keys=True))
         return EXIT_CLEAN if result["passed"] else EXIT_OPERATIONAL

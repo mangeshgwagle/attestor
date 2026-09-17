@@ -10,7 +10,7 @@ import json
 from typing import Any
 
 
-VERSION = "4.2"
+VERSION = "4.3"
 REPORT_SCHEMA = "attestorlang-run/4.2"
 
 MAX_SOURCE_BYTES = 256 * 1024

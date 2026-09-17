@@ -1,0 +1,16 @@
+{
+  "id": "mangeshkwagle/attestor-43-benchmark",
+  "title": "Attestor 4.3 Benchmark",
+  "code_file": "kaggle_benchmark.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": ["mangeshkwagle/attestor-43-lora"],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": [],
+  "accelerator": "nvidiaTeslaT4x2"
+}

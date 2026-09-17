@@ -22,7 +22,7 @@ import hashlib
 import re
 from typing import Any, Iterable, Mapping, Sequence
 
-VERSION = "4.2"
+VERSION = "4.3"
 MODEL_SCHEMA = "attestor.threat-model/4.2"
 INCIDENT_SCHEMA = "attestor.incident/4.2"
 ID_RE = re.compile(r"[A-Za-z0-9_.:@/+-]{1,256}")

@@ -17,8 +17,9 @@ import argparse
 import hashlib
 import json
 import sys
+from pathlib import Path
 
-sys.path.insert(0, __file__.rsplit("\\", 1)[0] if "\\" in __file__ else ".")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import coverage_fuzz42 as cfuzz  # noqa: E402
 from offensive_fuzz42 import minimize  # noqa: E402
@@ -80,9 +81,8 @@ def classify(crash):
 
 def _grade_with_asm(severity_float):
     try:
-        sys.path.insert(0, __file__.rsplit("\\", 1)[0] +
-                        "\\triage_kernel42" if "\\" in __file__
-                        else "./triage_kernel42")
+        _here = str(Path(__file__).resolve().parent / "triage_kernel42")
+        sys.path.insert(0, _here)
         import triage_asm42 as tasm
         dll = tasm.load()
         scored = tasm.score(dll, [0.30, 0.20, 0.25, 0.15, 0.10],

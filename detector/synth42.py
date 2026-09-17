@@ -311,11 +311,11 @@ def _sub(k):
 
 
 def _rotl(k):
+    shift = k % 8
     def fn(b):
-        k = k % 8
-        if not b or k == 0:
+        if not b or shift == 0:
             return bytes(b)
-        return bytes((((x << k) & 0xFF) | (x >> (8 - k))) for x in b)
+        return bytes((((x << shift) & 0xFF) | (x >> (8 - shift))) for x in b)
     return fn
 
 

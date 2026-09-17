@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 
 
-sys.path.insert(0, __file__.rsplit("\\", 1)[0] if "\\" in __file__ else ".")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 AF_SCHEMA = "attestor-autofix-4.2"
 

@@ -47,7 +47,7 @@ import sys
 from typing import Any, Iterable, Sequence
 
 SCHEMA = "attestor.review/4.2"
-VERSION = "4.2"
+VERSION = "4.3"
 
 # Reviewed one file at a time, and bounded, because a reviewer that stalls on
 # a generated blob is a reviewer nobody runs twice.
